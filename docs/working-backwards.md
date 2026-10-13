@@ -93,7 +93,7 @@ O especialista usa uma única experiência, sem escolher entre modos. Ele testa 
 6. **Evidenciar:** o Playground mostra o impacto, as regras relacionadas, os dados usados e o contexto necessário para investigar o resultado.
 7. **Transformar a descoberta em cenário:** um finding da IA vira um novo cenário que pode ser explorado no próprio Playground.
 8. **Decidir:** o especialista aceita ou rejeita a hipótese e decide se a política deve mudar.
-9. **Implementar (evolução futura, fora do MVP):** depois da aprovação, a solução gera código, testes e Pull Request para revisão.
+9. **Implementar (evolução futura, fora do núcleo do MVP):** depois da aprovação, a solução gera código, testes e Pull Request para revisão. No hackathon, este passo aparece como demonstração: um artefato de mudança (diff + testes) rotulado e não submetido. O PR real depende de acesso aos repositórios SYN (ver R11/R12 e OQ-9 no `requirements.md`).
 
 **Exemplo**
 
@@ -182,7 +182,7 @@ Porque o especialista não deveria ter que decidir de antemão se quer testar ou
 
 **O que fica fora do escopo do MVP?**
 
-- Geração de código, testes e Pull Request (passo 9), que é evolução futura.
+- Geração de código, testes e Pull Request reais (passo 9), que é evolução futura. No MVP o passo 9 é apenas demonstrado, como artefato rotulado e não submetido.
 - Qualquer alteração em produção.
 - Criação de novos estudos: o MVP usa apenas os estudos que já existem.
 - Políticas e produtos cobertos na primeira versão: definir.

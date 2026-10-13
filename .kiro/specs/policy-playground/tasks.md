@@ -3,15 +3,15 @@
 ## Document Information
 
 - **Feature Name**: Policy Playground
-- **Version**: 0.1 (draft, pending human approval)
+- **Version**: 1.1 (draft, pending human approval)
 - **Status**: Tasks phase — awaiting approval before implementation. No code is written until this plan is explicitly approved.
 - **Related documents**:
-  - Requirements: `.kiro/specs/policy-playground/requirements.md` (1.0, approved, R1–R16 + NFRs)
-  - Design: `.kiro/specs/policy-playground/design.md` (approved)
+  - Requirements: `.kiro/specs/policy-playground/requirements.md` (1.1; 1.0 approved, R1–R16 + NFRs)
+  - Design: `.kiro/specs/policy-playground/design.md` (1.1; 1.0 approved)
 
 ## Implementation Overview
 
-This plan turns the approved design into incremental, test-driven coding tasks. It builds the MVP core on the **synthetic fixture** (`policy-playground-demo-policy.json`) with the **`SimulatedRunner`** (results always labeled `SIMULADO`), exactly as the design scopes it. Tasks are ordered so each step builds on validated earlier work: data contract → policy model/validation → evaluator → scenarios/discovery → simulated execution → comparison → investigation record/audit → AI investigation → UI → governance/FinOps.
+This plan turns the approved design into incremental, test-driven coding tasks. It builds the MVP core on the **synthetic fixture** (`fixtures/policy-playground-demo-policy.json`) with the **`SimulatedRunner`** (results always labeled `SIMULADO`), exactly as the design scopes it. Tasks are ordered so each step builds on validated earlier work: data contract → policy model/validation → evaluator → scenarios/discovery → simulated execution → comparison → investigation record/audit → AI investigation (including deterministic generators) → UI → governance/FinOps/metrics → end-to-end → AWS deployment.
 
 Tasks that depend on real SYN access or on an open question are marked **[CONDITIONAL]** with the gating OQ/risk; they are not started unless that gate is resolved, matching the design's ◑ coverage rows (§14.1).
 
@@ -20,7 +20,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
 - **Testing strategy**: test-driven per task — unit tests alongside each module; the design's §14 assertions are the acceptance checks.
 - **Integration strategy**: single modular-monolith app (design D-1); modules integrated behind the interfaces named in §4/§6/§9.
 - **Determinism invariant**: AI code paths never produce or raise an impact number; `evidenceLevel` is derived only from a deterministic `ExecutionResult` (design §6.2, §9.3).
-- **No implementation details beyond design**: tasks do not pick frameworks/AWS services; those remain deferred (design §3).
+- **No implementation details beyond design**: tasks do not pick application frameworks (still deferred, design §3). AWS services are the ones fixed in design §16 and are used only in Phase 9; Phases 1–8 run locally with no cloud dependency, so the core can be tested before deployment.
 
 ---
 
@@ -54,7 +54,8 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - Produce a structured `ValidationReport`: schema/shape, referential integrity (`depends_on`, `parameters`, `produced_by`, `motivo.rule_id`, `used_by`), DAG integrity (cycles, orphans, `execution_order` vs `depends_on` mismatch), unknown `logic.type` as a hard error
   - Block exploration/investigation when any blocking check fails; emit a specific, comprehensible message naming the section/field/rule/edge
   - Unit tests: valid fixture passes; mutated fixtures (missing field, dangling `depends_on`, injected cycle, unknown `logic.type`, and a predefined-vs-predefined duplicate-parameter collision per task 2) each fail with the right message and do not proceed
-  - _Requirements: R16.2, R1.3; design §7.1, §13_
+  - A stage without `syn_area`, or with a value outside {Extraction, ETL, Hard filters, Final base}, produces a **non-blocking warning** in the `ValidationReport` (design §6.1)
+  - _Requirements: R16.2, R1.3, R1.2; design §6.1, §7.1, §13_
 
 ### Phase 2: Deterministic rule evaluation and dependency discovery
 
@@ -151,6 +152,22 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - Unit tests: suggestion set is capped; no `ai_suggestion` carries a numeric impact or evidence above `none` without an `ExecutionResult`
   - _Requirements: R7.1, R7.3, R8.1, R8.2, R8.3; design §10, §9.3_
 
+- [ ] 12.1 Implement deterministic candidate generators G1 and G2
+  - G1 (shared-input neighbours): rules outside the changed path (task 6) whose `inputs` share a non-parameter variable with it, with their forward closure attached
+  - G2 (branch reachability): for analyzable `case_when` conditions over one numeric variable, compute per-branch intervals with first-match semantics, intersect with the target-outcome constraint, and report branches newly unreachable / newly reachable vs. the baseline, propagated to `matrix_lookup` rows
+  - Generator output is a `Finding` with `source=deterministic_analysis`, `evidenceLevel=none`, `generator`, and `structuralBasis`; it never calls the model and never carries an impact number
+  - Unit tests (against the real fixture; derive expectations from the loaded model, do not hardcode them independently):
+    - P001 = 3000: G1 returns R007 with R008 attached
+    - P001 = 3000: G2 reports R007 `BASICA` newly unreachable under approval (R009), with R008 row `BASICA` attached
+    - P001 = 2500 (no change): G2 reports nothing new
+    - an out-of-grammar condition is reported as "não analisável", not guessed
+  - _Requirements: R8.1, R8.5, R5.10; design §10.3, D-10_
+
+- [ ] 12.2 Implement feedback-aware ranking
+  - Score = `w_struct · [deterministic_analysis] + w_fb · (relevant + 1) / (assessed + 2)` per (policy, kind), weights in configuration; apply the cap *N* (task 12) after ranking, over deterministic and model suggestions together
+  - Unit tests: with no assessments the feedback term is 0.5 for every kind; recorded assessments change the order as expected; the cap is applied after ranking
+  - _Requirements: R8.2, R8.4, R8.6; design §10.2, §10.3_
+
 - [ ] 13. Implement finding → investigable scenario
   - Turn a relevant finding into a scenario that goes through the same confirmation + execution + evidence path; default to explicit specialist action to launch execution (OQ-8 default)
   - Unit tests: a finding-derived scenario routes through confirmation/execution/evidence like any other; no auto-advance to a committed change
@@ -159,7 +176,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
 ### Phase 6: Interface
 
 - [ ] 14. Implement policy exploration and DAG visualization
-  - Render rules, variables, parameters, dependencies, and `motivos` from the loaded Policy Spec; indicate each element's SYN area (Extraction/ETL/Hard filters/Final base); make each element's origin traceable; show the explicit "cannot be explored" state on invalid/unavailable policy
+  - Render rules, variables, parameters, dependencies, and `motivos` from the loaded Policy Spec; indicate each element's SYN area (Extraction/ETL/Hard filters/Final base) via `rule.stage_id → stage.syn_area`, showing "área SYN não informada" when absent; make each element's origin traceable; show the explicit "cannot be explored" state on invalid/unavailable policy
   - Component tests for rendering and the error/empty states
   - _Requirements: R1.1, R1.2, R1.3, R1.4; design §4, §7.1_
 
@@ -197,12 +214,38 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - Component/unit tests: progress state shown during a run; stale/unknown context raises a visible uncertainty indicator
   - _Requirements: NFR performance (progress), R13.1, R13.2, R13.3; design §12, §13, §15_
 
+- [ ] 19.1 Instrument product metrics
+  - Record `hypothesis.submittedAt` and the first `ExecutionResult.createdAt` per hypothesis in the `InvestigationRecord`; expose the in-app hypothesis-to-evidence time and the per-session relevant-finding share through a metrics port (local implementation in Phases 1–8, CloudWatch in task 23)
+  - Record model token usage per hypothesis from the model adapter (feeds the FinOps indicator of task 18)
+  - Unit tests: a hypothesis reaching a deterministic result records both timestamps; one ending in `cannot_calculate` records no evidence timestamp; the relevant share counts only assessed findings
+  - _Requirements: Primary-objective NFR 2–3, NFR FinOps; design §12_
+
 ### Phase 8: End-to-end validation (MVP core)
 
 - [ ] 20. Wire and validate the full worked-example flow (R005/P001, SIMULADO)
-  - Integrate modules end to end for "renda mínima 2500 → 3000": structure hypothesis → confirm → scenario overlay → reverse discovery (R001→R005→R009) → SimulatedRunner → baseline/scenario comparison → bounded AI suggestions → accept/reject → recorded investigation
-  - End-to-end tests assert the design invariants: deterministic-only impact, SIMULADO labeling everywhere, state/evidence separation, append-only history, no production effect
-  - _Requirements: R1–R10, R14, R16 (integrated); design §5, §14_
+  - Integrate modules end to end for "renda mínima 2500 → 3000": structure hypothesis → confirm → scenario overlay → reverse discovery (R001→R005→R009) → SimulatedRunner → baseline/scenario comparison → bounded suggestions (G1/G2 + model, ranked) → finding "R007 BASICA inalcançável para aprovados" → finding → scenario → SimulatedRunner over `renda_mensal ∈ [2500, 3000)` → accept/reject → recorded investigation with metrics
+  - End-to-end tests assert the design invariants: deterministic-only impact, SIMULADO labeling everywhere, state/evidence separation, append-only history, no production effect; and that the G2 finding appears in the bounded set for this scenario
+  - _Requirements: R1–R10, R14, R16, Primary-objective NFR 2–3 (integrated); design §5, §10.3, §14_
+
+### Phase 9: AWS deployment (design §16)
+
+Runs after the MVP core passes task 20. It changes where modules run, not what they do.
+
+- [ ] 21. Provision the serverless stack with AWS CDK
+  - One stack per environment: S3 + CloudFront for the SPA; API Gateway HTTP API + one Lambda function hosting the backend; versioned S3 bucket for the Policy Spec; S3 bucket for demo artifacts; Cognito user pool with the demo role groups; cost-allocation tags on every resource; AWS Budgets alarm
+  - Package the backend so all §4 modules run in the single function (D-1, D-9)
+  - Verifiable completion: `cdk synth` succeeds; after deploy, loading the fixture from the S3 bucket through the API returns the same `ValidationReport` as the local run
+  - _Requirements: R15.3, R16.1, NFR FinOps; design §16, D-8, D-9_
+
+- [ ] 22. Connect the model adapter to Amazon Bedrock with Guardrails
+  - Implement the model adapter over the Bedrock Converse API; attach a Bedrock guardrail with sensitive-information filters on input and output; read token usage from each response for task 19.1
+  - Tests: the adapter is the only code path that calls the model; prompts still contain no raw `Motivo de Decisão` rows (task 17 assertions run against the deployed adapter); a guardrail intervention is surfaced as such, never as an empty suggestion set
+  - _Requirements: R15.2, R3, R8, NFR FinOps; design §12, §16_
+
+- [ ] 23. Wire observability and product metrics to CloudWatch
+  - Structured logs, X-Ray tracing on the API and function, and the metrics port of task 19.1 emitting custom CloudWatch metrics (hypothesis-to-evidence time, relevant-finding share, tokens per hypothesis)
+  - Verifiable completion: running the task 20 flow against the deployed stack produces one trace per request and data points for each metric
+  - _Requirements: Primary-objective NFR 2–3, NFR performance, NFR FinOps; design §12, §16_
 
 ---
 
@@ -231,6 +274,7 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 
 - [ ] C4. **[CONDITIONAL — OQ-16 / OQ-10]** Implement cross-session persistence / exportable audit
   - Persist the InvestigationRecord across sessions and/or export it, if the demo requires it (MVP guarantees only in-session append-only history)
+  - If OQ-16 is decided in favor of persistence, the store is the DynamoDB table of design §16, behind the same repository interface as the in-session store
   - _Requirements: R14 (depth); design §12 — gated by OQ-16, OQ-10_
 
 - [ ] C5. **[CONDITIONAL — OQ-2 / OQ-15]** Adapt the loader/validator to the real Policy Spec schema
@@ -243,26 +287,26 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 
 | Requirement | Task(s) |
 |-------------|---------|
-| R1 Policy exploration | 2, 3, 14 |
+| R1 Policy exploration | 2, 3, 3.1 (`syn_area` warning), 14 |
 | R2 Two entry points / hybrid | 15 |
 | R3 Hypothesis structuring | 10 |
 | R4 Human confirmation | 5, 11 |
 | R5 Deterministic impact (SIMULADO core) | 4, 5, 6, 7, 7.1 (+ C1 for real) |
 | R6 Baseline vs scenario | 8 |
 | R7 Evidence / proven-unproven | 9.2, 12, 16 |
-| R8 AI discovery (bounded) | 12 |
+| R8 AI discovery (bounded) | 12, 12.1, 12.2 |
 | R9 Finding → scenario | 13 |
 | R10 Human decision | 9.2, 16 |
 | R11 Code+tests | C2 |
 | R12 Pull request | C3 |
 | R13 Domain-context freshness | 19 (+ C5) |
 | R14 Traceability/audit | 9.1 (+ C4 for persistence/export) |
-| R15 Governed data / privacy | 17 |
+| R15 Governed data / privacy | 17, 21, 22 |
 | R16 Consume+validate Policy Spec | 2, 3 (+ C5 real schema) |
-| NFR lead-time | served by the integrated flow (task 20); measurement OQ-13 |
+| NFR lead-time | 19.1, 20, 23 (in-app proxy); end-to-end measurement OQ-13 |
 | NFR usability (no code) | 10, 15 |
 | NFR performance (progress) | 19 |
-| NFR FinOps | 12, 18 |
+| NFR FinOps | 12, 18, 19.1, 21, 23 |
 | NFR reliability/integrity | 7, 18 |
 
 Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional and carry their gating OQ/risk; nothing architecturally foreseen but un-gated is presented as MVP-core work.
@@ -281,3 +325,13 @@ Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional 
 ## Approval Gate
 
 This is the Tasks phase deliverable. Per the Kiro Specs workflow, implementation does not begin until this plan is explicitly approved. On approval, tasks are executed in order; conditional tasks (C1–C5) stay blocked until their gating open question is resolved by a human decision.
+
+## Revision History
+
+| Version | Change | Reason |
+|---------|--------|--------|
+| 0.1 | Initial tasks drafted from Design 1.0. | — |
+| 1.1 | Tasks 12.1 (generators G1/G2) and 12.2 (feedback-aware ranking). | Requirements 1.1 R8.5–8.6; design §10.3. |
+| 1.1 | Task 19.1 (product metrics and token usage). | Requirements 1.1 Primary-objective NFR 2–3; design §12. |
+| 1.1 | Phase 9, tasks 21–23 (CDK stack, Bedrock + Guardrails, CloudWatch). | Design 1.1 §16. |
+| 1.1 | Task 3.1 `syn_area` warning; task 14 area rendering; task 20 extended with the G2 finding; C4 names the DynamoDB store. | Design 1.1 §6.1, §10.3, §16. |

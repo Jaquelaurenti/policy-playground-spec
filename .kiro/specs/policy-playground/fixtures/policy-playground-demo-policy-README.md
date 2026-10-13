@@ -28,6 +28,18 @@ O especialista seleciona a política, abre a regra **R005**, altera `renda_minim
 - Parâmetros extraídos automaticamente podem duplicar os parâmetros conhecidos: deduplicar.
 - Ordem de execução e fluxos paralelos precisam ser representados explicitamente.
 
+## Mapeamento das etapas para as quatro áreas SYN (provisório)
+Os requisitos (R1.2) pedem que cada elemento indique a área SYN de origem: Extraction, ETL, Hard filters ou Final base. As etapas deste fixture têm outros nomes, então cada etapa declara a área em `stages[].syn_area`:
+
+| Etapa do fixture | `syn_area` | Observação |
+|---|---|---|
+| 01 Extração | Extraction | Leitura e `cast` do payload sintético. |
+| 02 Elegibilidade | Hard filters | Regras `filter` (R004–R006) ligadas a motivos. |
+| 03 Oferta | Final base | Derivação de faixa e limite que compõem a base final. |
+| 04 Consolidação | Final base | Resultado consolidado. |
+
+O fixture **não tem etapa própria de ETL**: as transformações estão embutidas na extração (`cast`). Esse mapeamento é uma escolha de demonstração e não descreve como a política real se distribui entre as áreas (OQ-18).
+
 ## Limites do fixture
 Este arquivo **não é uma implementação executável**. Expressões são strings para apoiar o desenho do contrato; ainda será preciso decidir parser/avaliador e semântica de nulos, casting e erros. `perfil` é uma entrada externa sintética para demonstrar `matrix_lookup`. A estrutura de notebooks e DAG é simplificada.
 
