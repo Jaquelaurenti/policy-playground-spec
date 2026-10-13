@@ -3,11 +3,11 @@
 ## Document Information
 
 - **Feature Name**: Policy Playground
-- **Version**: 1.1 (draft, pending human approval)
+- **Version**: 1.2 (draft, pending human approval)
 - **Status**: Tasks phase — awaiting approval before implementation. No code is written until this plan is explicitly approved.
 - **Related documents**:
-  - Requirements: `.kiro/specs/policy-playground/requirements.md` (1.1; 1.0 approved, R1–R16 + NFRs)
-  - Design: `.kiro/specs/policy-playground/design.md` (1.1; 1.0 approved)
+  - Requirements: `.kiro/specs/policy-playground/requirements.md` (1.2; 1.0 approved, R1–R16 + NFRs + Decision Log)
+  - Design: `.kiro/specs/policy-playground/design.md` (1.2; 1.0 approved)
 
 ## Implementation Overview
 
@@ -36,7 +36,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - _Requirements: R16, R1 (foundation); design §3, §4, §6.2_
 
 - [ ] 2. Implement the Policy Spec data model and loader
-  - Parse the nine Policy Spec sections (`policy`, `stages`, `rules`, `variables`, `parameters`, `dag`, `motivos`, `validation_map`, `output_vars`) into the in-memory `PolicyModel` (design §6.1/§6.2)
+  - Parse the nine Policy Spec sections (`policy`, `stages`, `rules`, `variables`, `parameters`, `dag`, `motivos`, `validation_map`, `output_vars`) into the in-memory `PolicyModel` (design §6.1/§6.2), and load the complementary `fixtures/policy-playground-demo-extensions.json` (design §6.1.1) without ever writing to the Policy Spec
   - Derive `consumed_by` by inverting rule `inputs`/`outputs`
   - Deduplicate parameters by the design key `(name, scope)` with **explicit, deterministic** behavior: a predefined parameter (declared in `parameters`) always wins over an auto-extracted one with the same key; two **predefined** parameters sharing the same key are a conflict, not a silent merge; every merge/conflict is recorded in the `ValidationReport` with both source definitions and the resolution
   - Load the synthetic fixture as the reference policy
@@ -54,7 +54,9 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - Produce a structured `ValidationReport`: schema/shape, referential integrity (`depends_on`, `parameters`, `produced_by`, `motivo.rule_id`, `used_by`), DAG integrity (cycles, orphans, `execution_order` vs `depends_on` mismatch), unknown `logic.type` as a hard error
   - Block exploration/investigation when any blocking check fails; emit a specific, comprehensible message naming the section/field/rule/edge
   - Unit tests: valid fixture passes; mutated fixtures (missing field, dangling `depends_on`, injected cycle, unknown `logic.type`, and a predefined-vs-predefined duplicate-parameter collision per task 2) each fail with the right message and do not proceed
-  - A stage without `syn_area`, or with a value outside {Extraction, ETL, Hard filters, Final base}, produces a **non-blocking warning** in the `ValidationReport` (design §6.1)
+  - A stage with no entry in the extensions `stage_syn_area`, or with a value outside {Extraction, ETL, Hard filters, Final base}, produces a **non-blocking warning** in the `ValidationReport` (design §6.1)
+  - Checks 6–8 of design §7.1: extensions bound to the loaded Policy Spec (`policy_id`, `source_commit`, known stage and parameter ids); baseline parameter values inside `parameter_domains`; referenced dataset file exists, `contains_pii: false`, `record_count` matches (blocks execution only)
+  - Unit tests: an extensions file pointing to another `source_commit` is rejected while the Policy Spec still loads; a P001 domain that excludes 2500 is reported; removing the dataset file blocks execution only; the Policy Spec file is unchanged after the run
   - _Requirements: R16.2, R1.3, R1.2; design §6.1, §7.1, §13_
 
 ### Phase 2: Deterministic rule evaluation and dependency discovery
@@ -96,7 +98,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
 
 - [ ] 7. Implement the `ImpactStudyRunner` interface and `SimulatedRunner`
   - Define `ImpactStudyRunner.runScenario(policyVersion, scenario, affectedSubDag) -> ExecutionResult`
-  - `SimulatedRunner`: execute the evaluator over the affected sub-DAG against a synthetic payload set; always set `mode=SIMULADO`, `status=ok`; perform no real-history comparison
+  - `SimulatedRunner`: execute the evaluator over the affected sub-DAG against the synthetic dataset referenced in the extensions `datasets` (`fixtures/policy-playground-demo-dataset.json`, 12 records); always set `mode=SIMULADO`, `status=ok`; record its `dataset_version`; perform no real-history comparison
   - **Scope statement (make explicit in code docs and output):** a `SimulatedRunner` run demonstrates the **deterministic behavior of the rules over synthetic payloads**; it does **not** prove real impact against historical `Motivo de Decisão` data. Preserve the design distinction between execution, validation, and evidence level (§9.3): a run that completed is not, by itself, validated.
   - Record `ExecutionResult` with `executionId`, `attempt`, `source=deterministic`, `createdAt`; derive `evidenceLevel` via the canonical map (`SIMULADO & ok → simulated`), never set directly; no AI path may write or raise a result
   - Verifiable acceptance criteria (unit tests, against the real fixture):
@@ -114,6 +116,13 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - This is an incremental checkpoint only; it does **not** replace task 20's full end-to-end validation (which adds AI, UI, decision, audit, governance)
   - _Requirements: R5.1, R5.3, R5.4, R5.9, R16.2 (integrated subset); design §5, §8.1, §8.2, §9.1_
 
+- [ ] 7.2 Implement the asynchronous, idempotent execution contract
+  - `POST /executions` computes the idempotency key `sha256(policyVersion, sorted(overrides), datasetVersion, runnerVersion)` (design §9.4); a key with a successful result returns it without running compute; otherwise a job is created in `pending`
+  - Job states `pending → running → done`; `GET /executions/{id}` returns `jobState` and, when done, the `ExecutionResult`; configurable timeout ends the job as `cannot_calculate`
+  - Record `policyVersion` (Policy Spec `source_commit` + object version), `datasetVersion` and `runnerVersion` on every `ExecutionResult`
+  - Unit tests: the same request twice returns the same `executionId` and runs the runner once; different overrides produce different keys; a timeout yields `cannot_calculate` with no number; re-running a recorded key against the recorded versions yields identical `outputs`, and a forced mismatch raises an integrity error
+  - _Requirements: R5.7, R14.6, NFR FinOps 3, NFR Reliability 3, NFR Performance 1; design §9.4, D-12_
+
 - [ ] 8. Implement baseline-vs-scenario comparison capability
   - Reusable comparison over `output_vars` (`resultado`, `limite_sugerido`) plus affected `motivos`, run for baseline and scenario; carry the current execution's `evidenceLevel` badge
   - If baseline results are unavailable, return a "comparison cannot be shown" state (no fabricated comparison)
@@ -123,7 +132,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
 ### Phase 4: Investigation record, findings lifecycle, and audit
 
 - [ ] 9. Implement the append-only InvestigationRecord and finding lifecycle
-- [ ] 9.1 Implement the record and execution history (append-only, in-session)
+- [ ] 9.1 Implement the record and execution history (append-only)
   - Append-only `InvestigationRecord` linking hypothesis → params → policy version → scenario(s) → execution(s) → finding(s) → human decision(s); executions referenced by `executionIds[]` + `currentExecutionId`, never overwritten on re-run
   - Unit tests: a re-run appends a new `ExecutionResult` (incremented `attempt`), prior results remain, `currentExecutionId` points to newest; records are only appended, never rewritten
   - _Requirements: R14.1, R14.2, R14.3; design §6.2, §10.1, §12_
@@ -132,6 +141,12 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - `investigationState` and `evidenceLevel` move independently (accept/reject never changes evidence)
   - Unit tests: rejection before any execution is allowed and leaves `evidenceLevel=none`; accepting changes state but not evidence
   - _Requirements: R7.2, R7.4, R8.4, R9.2, R10.1, R10.4; design §10.1, §11_
+
+- [ ] 9.3 Persist the record and write the audit lake
+  - Implement the `InvestigationRecord` repository behind one interface with two adapters: in-memory (local tests) and DynamoDB (design D-11)
+  - Emit every event (hypothesis, confirmation, execution, finding, assessment, decision) to an audit writer that puts one JSON object per `eventId` in the S3 audit bucket; retries reuse the same key; failures are retried and alarmed
+  - Unit/integration tests: a session reloaded from the store reproduces the same chain; each event produces exactly one audit object even when the writer is retried; the application role cannot update or delete audit objects
+  - _Requirements: R14.1, R14.4, R14.5; design §12, D-11_
 
 ### Phase 5: AI-assisted investigation (advisory, bounded)
 
@@ -176,20 +191,21 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
 ### Phase 6: Interface
 
 - [ ] 14. Implement policy exploration and DAG visualization
-  - Render rules, variables, parameters, dependencies, and `motivos` from the loaded Policy Spec; indicate each element's SYN area (Extraction/ETL/Hard filters/Final base) via `rule.stage_id → stage.syn_area`, showing "área SYN não informada" when absent; make each element's origin traceable; show the explicit "cannot be explored" state on invalid/unavailable policy
+  - Render rules, variables, parameters, dependencies, and `motivos` from the loaded Policy Spec; indicate each element's SYN area (Extraction/ETL/Hard filters/Final base) via `rule.stage_id → stage_syn_area` (extensions file), showing "área SYN não informada" when absent; make each element's origin traceable; show the explicit "cannot be explored" state on invalid/unavailable policy
   - Component tests for rendering and the error/empty states
   - _Requirements: R1.1, R1.2, R1.3, R1.4; design §4, §7.1_
 
 - [ ] 15. Implement the hybrid what-if editor and investigation entry points
-  - Visual parameter editing for supported `parameters` (P001/P002) with preview and baseline/scenario diff; natural-language hypothesis entry; both as one unified experience; two entry points (visual exploration / business question) without forcing a choice up front
+  - Visual parameter editing for supported `parameters` (P001/P002) with preview and baseline/scenario diff, using `parameter_domains` from the extensions file (`min`, `max`, `step`) for the form control and rejecting values outside it with the accepted range; natural-language hypothesis entry; both as one unified experience; two entry points (visual exploration / business question) without forcing a choice up front
   - Component tests: editing P001 produces a scenario overlay and a diff without mutating baseline; both entry points reach a structured hypothesis
   - _Requirements: R2.1, R2.2, R2.3, R2.4, R2.5; design §4, §5, §8.1_
 
 - [ ] 16. Implement results, evidence badges, and human decision UI
   - Present comparison and findings with explicit evidence-level badges: `none` ("Hipótese sem comprovação"), `simulated` ("Resultado SIMULADO — não é impacto real", persistent badge on every number), `study_validated` label reserved for real validated runs; badge derived from current execution `status`+`mode`
   - Accept/reject findings and select a scenario as promising (enables the deterministic tail only on explicit selection); accepting is never read as production approval
-  - Component tests: a simulated number never renders without the SIMULADO badge; accept/reject updates state but not evidence; selection gates the tail
-  - _Requirements: R7.4, R10.1, R10.2, R10.3, R10.4; design §11, §9.3_
+  - Record the hypothesis decision as `HumanDecision` with outcome Accept / Reject / Defer and a mandatory rationale; a later decision creates a new record with `supersedes`, never an edit
+  - Component tests: a simulated number never renders without the SIMULADO badge; accept/reject updates state but not evidence; selection gates the tail; a decision without rationale is refused; a second decision leaves the first unchanged and visible; `defer` does not enable the tail
+  - _Requirements: R7.4, R10.1–R10.6; design §6.2, §11, §9.3_
 
 ### Phase 7: Governance, privacy, and FinOps
 
@@ -205,9 +221,11 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - _Requirements: R15.1, R15.2, R15.3; design §12, D-8; real identity is OQ-11 (not in MVP)_
 
 - [ ] 18. Implement FinOps session cap and reliability states
-  - Enforce the per-session cap on AI investigations (from task 12) and surface a per-hypothesis cost indicator; implement the reliability states (external capability unavailable → state the limitation, never fabricate)
-  - Unit tests: cap is enforced; unavailable-dependency path communicates the limitation and fabricates nothing
-  - _Requirements: NFR FinOps, NFR reliability/integrity, R5.7; design §12, §13_
+  - Enforce the per-session caps (default 10 findings shown; bounded model calls) with remaining findings available on request, and surface a per-hypothesis cost indicator; implement the reliability states (external capability unavailable → state the limitation, never fabricate)
+  - Model-outage mode: exploration, visual editing, execution and decisions remain available; the interface states that natural-language input and AI suggestions are unavailable
+  - Idempotency keys on every state-changing endpoint (hypotheses, executions, decisions)
+  - Unit tests: caps are enforced and configurable; unavailable-dependency path communicates the limitation and fabricates nothing; with the model adapter failing, the non-AI flow completes; a retried request with the same idempotency key creates no duplicate
+  - _Requirements: NFR FinOps 1–2, NFR Reliability 1–3, R5.7; design §12, §13_
 
 - [ ] 19. Implement progress feedback and domain-context staleness signaling
   - Keep the specialist informed of progress while an execution runs; where a domain-context artifact is used, signal potential staleness and never silently present it as current
@@ -231,11 +249,11 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
 
 Runs after the MVP core passes task 20. It changes where modules run, not what they do.
 
-- [ ] 21. Provision the serverless stack with AWS CDK
-  - One stack per environment: S3 + CloudFront for the SPA; API Gateway HTTP API + one Lambda function hosting the backend; versioned S3 bucket for the Policy Spec; S3 bucket for demo artifacts; Cognito user pool with the demo role groups; cost-allocation tags on every resource; AWS Budgets alarm
-  - Package the backend so all §4 modules run in the single function (D-1, D-9)
-  - Verifiable completion: `cdk synth` succeeds; after deploy, loading the fixture from the S3 bucket through the API returns the same `ValidationReport` as the local run
-  - _Requirements: R15.3, R16.1, NFR FinOps; design §16, D-8, D-9_
+- [ ] 21. Provision the AWS stack with AWS CDK
+  - One stack per environment: S3 + CloudFront + WAF for the SPA; API Gateway HTTP API with Cognito JWT authorizer, VPC Link and internal ALB; ECS cluster with one Fargate service (≥ 2 tasks across 2 AZs, auto scaling on CPU and request count) and a runner task definition from the same image; DynamoDB tables (on-demand); versioned S3 bucket for the Policy Spec; S3 audit bucket with no update/delete for the application role (Object Lock as an option); Athena workgroup over the audit bucket; S3 bucket for demo artifacts; KMS keys; Secrets Manager; cost-allocation tags; AWS Budgets alarm
+  - Cognito user pool with groups Policy Specialist, Risk Approver, Data Analyst and Viewer, and a SAML identity provider slot for Azure AD (connected when corporate approval exists; demo users otherwise)
+  - Verifiable completion: `cdk synth` succeeds; after deploy, loading the fixture from S3 through the API returns the same `ValidationReport` as the local run; stopping one API task does not interrupt an open session
+  - _Requirements: R14.4–14.5, R15.3–15.6, R16.1, NFR Scalability 1–3, NFR FinOps; design §16, D-8, D-9, D-11_
 
 - [ ] 22. Connect the model adapter to Amazon Bedrock with Guardrails
   - Implement the model adapter over the Bedrock Converse API; attach a Bedrock guardrail with sensitive-information filters on input and output; read token usage from each response for task 19.1
@@ -243,9 +261,16 @@ Runs after the MVP core passes task 20. It changes where modules run, not what t
   - _Requirements: R15.2, R3, R8, NFR FinOps; design §12, §16_
 
 - [ ] 23. Wire observability and product metrics to CloudWatch
-  - Structured logs, X-Ray tracing on the API and function, and the metrics port of task 19.1 emitting custom CloudWatch metrics (hypothesis-to-evidence time, relevant-finding share, tokens per hypothesis)
+  - Structured logs, X-Ray tracing on the API and ECS tasks, and the metrics port of task 19.1 emitting custom CloudWatch metrics (hypothesis-to-evidence time, relevant-finding share, tokens per hypothesis)
   - Verifiable completion: running the task 20 flow against the deployed stack produces one trace per request and data points for each metric
   - _Requirements: Primary-objective NFR 2–3, NFR performance, NFR FinOps; design §12, §16_
+
+- [ ] 24. Validate scalability and resilience on the deployed stack
+  - Load test with 50 concurrent simulated sessions running the task 20 flow; record P95 of hypothesis structuring and API error rate
+  - Start a long runner job and confirm API latency for other sessions stays within the baseline
+  - Stop one API task during a session and confirm the session continues on the other task
+  - Verifiable completion: P95 structuring ≤ 30 s, zero errors attributable to the Playground, results recorded in the repository
+  - _Requirements: NFR Performance 2, NFR Scalability 1–3, NFR Reliability 2; design §14, §16.1_
 
 ---
 
@@ -255,6 +280,7 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 
 - [ ] C1. **[CONDITIONAL — OQ-4]** Implement `SynStudyRunner` (real deterministic execution)
   - Behind the same `ImpactStudyRunner` interface; drive real studies, compare the final base against `Motivo de Decisão` using `validation_map`/`output_vars`; implement the §9.3 validation step producing `status ∈ {validated, executed_unvalidated, validation_failed}` and `ValidationOutcome`
+  - Run each real study as an on-demand ECS task (RunTask) under the job contract of task 7.2, against anonymized/synthetic data only
   - Validation thresholds/method are themselves gated by **OQ-6**; do not invent tolerances
   - _Requirements: R5.5, R5.6; design §9.1, §9.3 — gated by OQ-4, OQ-6_
 
@@ -272,10 +298,9 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
   - The real-PR requirement is a human call tied to OQ-9 and access availability; this plan does not decide it for the user
   - _Requirements: R12.1, R12.2, R12.3, R12.4; design §9.2 — gated by OQ-9/R-6_
 
-- [ ] C4. **[CONDITIONAL — OQ-16 / OQ-10]** Implement cross-session persistence / exportable audit
-  - Persist the InvestigationRecord across sessions and/or export it, if the demo requires it (MVP guarantees only in-session append-only history)
-  - If OQ-16 is decided in favor of persistence, the store is the DynamoDB table of design §16, behind the same repository interface as the in-session store
-  - _Requirements: R14 (depth); design §12 — gated by OQ-16, OQ-10_
+- [ ] C4. **[CONDITIONAL — governance request]** Enforce storage-level immutability on the audit lake
+  - Persistence and the append-only audit lake moved to the MVP core in 1.2 (task 9.3); what remains conditional is write-once enforcement with S3 Object Lock and a retention policy, enabled only if governance requires it
+  - _Requirements: R14.5 (strength); design §12_
 
 - [ ] C5. **[CONDITIONAL — OQ-2 / OQ-15]** Adapt the loader/validator to the real Policy Spec schema
   - Reconcile the fixture-based contract with the real upstream Policy Spec schema and freshness source once confirmed
@@ -287,7 +312,7 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 
 | Requirement | Task(s) |
 |-------------|---------|
-| R1 Policy exploration | 2, 3, 3.1 (`syn_area` warning), 14 |
+| R1 Policy exploration | 2, 3, 3.1 (SYN-area warning), 14 |
 | R2 Two entry points / hybrid | 15 |
 | R3 Hypothesis structuring | 10 |
 | R4 Human confirmation | 5, 11 |
@@ -300,14 +325,15 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 | R11 Code+tests | C2 |
 | R12 Pull request | C3 |
 | R13 Domain-context freshness | 19 (+ C5) |
-| R14 Traceability/audit | 9.1 (+ C4 for persistence/export) |
+| R14 Traceability/audit | 7.2, 9.1, 9.3 (+ C4 for storage-level immutability) |
 | R15 Governed data / privacy | 17, 21, 22 |
 | R16 Consume+validate Policy Spec | 2, 3 (+ C5 real schema) |
 | NFR lead-time | 19.1, 20, 23 (in-app proxy); end-to-end measurement OQ-13 |
 | NFR usability (no code) | 10, 15 |
-| NFR performance (progress) | 19 |
-| NFR FinOps | 12, 18, 19.1, 21, 23 |
-| NFR reliability/integrity | 7, 18 |
+| NFR performance (progress, 30 s P95) | 7.2, 19, 24 |
+| NFR scalability | 21, 24 |
+| NFR FinOps | 7.2, 12, 18, 19.1, 21, 23 |
+| NFR reliability/integrity | 7, 7.2, 18, 24 |
 
 Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional and carry their gating OQ/risk; nothing architecturally foreseen but un-gated is presented as MVP-core work.
 
@@ -335,3 +361,8 @@ This is the Tasks phase deliverable. Per the Kiro Specs workflow, implementation
 | 1.1 | Task 19.1 (product metrics and token usage). | Requirements 1.1 Primary-objective NFR 2–3; design §12. |
 | 1.1 | Phase 9, tasks 21–23 (CDK stack, Bedrock + Guardrails, CloudWatch). | Design 1.1 §16. |
 | 1.1 | Task 3.1 `syn_area` warning; task 14 area rendering; task 20 extended with the G2 finding; C4 names the DynamoDB store. | Design 1.1 §6.1, §10.3, §16. |
+| 1.2 | Task 7.2 (asynchronous, idempotent, reproducible execution) and 9.3 (DynamoDB persistence + S3 audit lake) added to the core. | Requirements 1.2 R14.4–14.6, NFR FinOps 3, Reliability 3; design D-11, D-12. |
+| 1.2 | Task 16 records Accept / Reject / Defer decisions, immutable and superseded; task 18 adds model-outage mode and idempotency keys. | Requirements 1.2 R10.5–10.6, NFR Reliability 2–3. |
+| 1.2 | Task 21 provisions ECS Fargate, API Gateway + VPC Link + ALB, DynamoDB, audit bucket, Athena and Cognito groups with an Azure AD slot; task 24 validates scale and resilience. | Design 1.2 §16, D-9; team decisions D-Q5, D-Q7, D-Q8, D-Q9. |
+| 1.2 | C4 narrowed to storage-level immutability (Object Lock); persistence is now core. | OQ-16 and OQ-10 resolved. |
+| 1.2 | Tasks 2, 3.1, 7, 14 and 15 read Playground metadata from the complementary extensions file and the synthetic dataset; the Policy Spec fixture is never modified. | R16.3; design §6.1.1. |

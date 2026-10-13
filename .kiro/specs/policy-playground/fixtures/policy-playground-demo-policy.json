@@ -12,7 +12,6 @@
     {
       "id": "01",
       "name": "Extração",
-      "syn_area": "Extraction",
       "notebooks": [
         {
           "id": "0101",
@@ -32,7 +31,6 @@
     {
       "id": "02",
       "name": "Elegibilidade",
-      "syn_area": "Hard filters",
       "notebooks": [
         {
           "id": "0201",
@@ -52,7 +50,6 @@
     {
       "id": "03",
       "name": "Oferta",
-      "syn_area": "Final base",
       "notebooks": [
         {
           "id": "0301",
@@ -71,7 +68,6 @@
     {
       "id": "04",
       "name": "Consolidação",
-      "syn_area": "Final base",
       "notebooks": [
         {
           "id": "0401",

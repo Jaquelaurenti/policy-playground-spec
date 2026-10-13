@@ -1,0 +1,129 @@
+{
+  "dataset_version": "synthetic-demo-2026-10-13",
+  "kind": "synthetic",
+  "contains_pii": false,
+  "description": "Conjunto 100% fictício de propostas para o SimulatedRunner. Os valores foram escolhidos à mão para cobrir os ramos das regras do fixture; não derivam de dados reais.",
+  "policy_id": "microcredito-demo",
+  "records": [
+    {
+      "record_id": "S01",
+      "cliente": {
+        "renda_mensal": 2200,
+        "idade": 30,
+        "comprometimento_pct": 20,
+        "perfil": "A"
+      },
+      "cobertura": "Renda abaixo do corte atual (2.500)"
+    },
+    {
+      "record_id": "S02",
+      "cliente": {
+        "renda_mensal": 2500,
+        "idade": 41,
+        "comprometimento_pct": 25,
+        "perfil": "B"
+      },
+      "cobertura": "Renda exatamente no corte atual"
+    },
+    {
+      "record_id": "S03",
+      "cliente": {
+        "renda_mensal": 2700,
+        "idade": 35,
+        "comprometimento_pct": 30,
+        "perfil": "A"
+      },
+      "cobertura": "Faixa BASICA aprovada hoje; reprovada com corte 3.000"
+    },
+    {
+      "record_id": "S04",
+      "cliente": {
+        "renda_mensal": 2950,
+        "idade": 52,
+        "comprometimento_pct": 18,
+        "perfil": "B"
+      },
+      "cobertura": "Faixa BASICA aprovada hoje; reprovada com corte 3.000"
+    },
+    {
+      "record_id": "S05",
+      "cliente": {
+        "renda_mensal": 3000,
+        "idade": 28,
+        "comprometimento_pct": 22,
+        "perfil": "A"
+      },
+      "cobertura": "Renda exatamente no novo corte; faixa MEDIA"
+    },
+    {
+      "record_id": "S06",
+      "cliente": {
+        "renda_mensal": 4200,
+        "idade": 45,
+        "comprometimento_pct": 34,
+        "perfil": "B"
+      },
+      "cobertura": "Faixa MEDIA, comprometimento perto do limite"
+    },
+    {
+      "record_id": "S07",
+      "cliente": {
+        "renda_mensal": 4800,
+        "idade": 33,
+        "comprometimento_pct": 36,
+        "perfil": "A"
+      },
+      "cobertura": "Faixa MEDIA reprovada por comprometimento (36 > 35)"
+    },
+    {
+      "record_id": "S08",
+      "cliente": {
+        "renda_mensal": 5000,
+        "idade": 39,
+        "comprometimento_pct": 15,
+        "perfil": "A"
+      },
+      "cobertura": "Renda no limite da faixa ALTA"
+    },
+    {
+      "record_id": "S09",
+      "cliente": {
+        "renda_mensal": 7500,
+        "idade": 60,
+        "comprometimento_pct": 28,
+        "perfil": "B"
+      },
+      "cobertura": "Faixa ALTA"
+    },
+    {
+      "record_id": "S10",
+      "cliente": {
+        "renda_mensal": 6100,
+        "idade": 17,
+        "comprometimento_pct": 10,
+        "perfil": "A"
+      },
+      "cobertura": "Faixa ALTA reprovada por idade (< 18)"
+    },
+    {
+      "record_id": "S11",
+      "cliente": {
+        "renda_mensal": 2800,
+        "idade": 19,
+        "comprometimento_pct": 40,
+        "perfil": "B"
+      },
+      "cobertura": "Faixa BASICA reprovada por comprometimento em ambos os cenários"
+    },
+    {
+      "record_id": "S12",
+      "cliente": {
+        "renda_mensal": 3100,
+        "idade": 18,
+        "comprometimento_pct": 35,
+        "perfil": "B"
+      },
+      "cobertura": "Idade e comprometimento exatamente nos limites"
+    }
+  ]
+}
