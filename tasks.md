@@ -1,0 +1,283 @@
+# Tasks — Policy Playground
+
+## Document Information
+
+- **Feature Name**: Policy Playground
+- **Version**: 0.1 (draft, pending human approval)
+- **Status**: Tasks phase — awaiting approval before implementation. No code is written until this plan is explicitly approved.
+- **Related documents**:
+  - Requirements: `.kiro/specs/policy-playground/requirements.md` (1.0, approved, R1–R16 + NFRs)
+  - Design: `.kiro/specs/policy-playground/design.md` (approved)
+
+## Implementation Overview
+
+This plan turns the approved design into incremental, test-driven coding tasks. It builds the MVP core on the **synthetic fixture** (`policy-playground-demo-policy.json`) with the **`SimulatedRunner`** (results always labeled `SIMULADO`), exactly as the design scopes it. Tasks are ordered so each step builds on validated earlier work: data contract → policy model/validation → evaluator → scenarios/discovery → simulated execution → comparison → investigation record/audit → AI investigation → UI → governance/FinOps.
+
+Tasks that depend on real SYN access or on an open question are marked **[CONDITIONAL]** with the gating OQ/risk; they are not started unless that gate is resolved, matching the design's ◑ coverage rows (§14.1).
+
+### Development Approach
+
+- **Testing strategy**: test-driven per task — unit tests alongside each module; the design's §14 assertions are the acceptance checks.
+- **Integration strategy**: single modular-monolith app (design D-1); modules integrated behind the interfaces named in §4/§6/§9.
+- **Determinism invariant**: AI code paths never produce or raise an impact number; `evidenceLevel` is derived only from a deterministic `ExecutionResult` (design §6.2, §9.3).
+- **No implementation details beyond design**: tasks do not pick frameworks/AWS services; those remain deferred (design §3).
+
+---
+
+## Implementation Plan
+
+### Phase 1: Project foundation and policy data contract
+
+- [ ] 1. Set up the single-application skeleton and shared types
+  - Create the modular-monolith structure with the six internal boundaries as modules (interface, orchestration, policy-representation, execution, ai-investigation, governance) per design §4
+  - Add build/lint/test tooling and a test runner; no business logic yet
+  - Define shared type stubs for `PolicyModel`, `Rule`, `Variable`, `Parameter`, `Dag`, `Motivo`, `Scenario`, `ExecutionResult`, `ValidationOutcome`, `Finding`, `InvestigationRecord` from the design §6.2 class model (interfaces only)
+  - Verifiable completion (evidence, not just files): the build and lint commands run clean, the test runner executes, and a smoke test imports every module boundary and the shared types and asserts they resolve (guards against broken wiring/circular imports) — this is the only task whose "test" is a build/smoke check rather than behavior
+  - _Requirements: R16, R1 (foundation); design §3, §4, §6.2_
+
+- [ ] 2. Implement the Policy Spec data model and loader
+  - Parse the nine Policy Spec sections (`policy`, `stages`, `rules`, `variables`, `parameters`, `dag`, `motivos`, `validation_map`, `output_vars`) into the in-memory `PolicyModel` (design §6.1/§6.2)
+  - Derive `consumed_by` by inverting rule `inputs`/`outputs`
+  - Deduplicate parameters by the design key `(name, scope)` with **explicit, deterministic** behavior: a predefined parameter (declared in `parameters`) always wins over an auto-extracted one with the same key; two **predefined** parameters sharing the same key are a conflict, not a silent merge; every merge/conflict is recorded in the `ValidationReport` with both source definitions and the resolution
+  - Load the synthetic fixture as the reference policy
+  - **Fixture note / open gap (OQ-17 — provisional MVP behavior only, do not resolve by assumption):** in the current fixture, `parameters` entries (P001, P002) have **no `scope` field** — `scope` appears only on `rules` and `motivos`. So the `(name, scope)` key the Design specifies is not directly computable from the parameter object alone, and Design §6.2 does not define how a parameter's `scope` is obtained. Implement the dedup behind a single documented key function `paramKey(param)` and apply this **provisional strategy, valid only for the MVP on the synthetic fixture**:
+    - while the fixture provides no `scope`, use `name` as the dedup key (this is a fixture-scoped fallback, not the design's `(name, scope)` rule);
+    - collisions between two **predefined** definitions on that key are detected and handled with the **blocking** behavior already defined above (reported as a conflict, never silently merged);
+    - predefined-vs-auto-extracted collisions keep the predefined definition as a recorded merge;
+    - every merge and every conflict stays **traceable** in the `ValidationReport`, naming both source definitions and the resolution.
+    This provisional strategy **must not be presented or reused as the definitive rule for the real Policy Spec schema**, and no scope-derivation rule is to be invented. See the OQ-17 note at the end of this document.
+  - Unit tests (against the real fixture): fixture loads; `consumed_by` for `renda_mensal` resolves to a set **derived from the fixture** (inverting `inputs`), expected {R005, R007} and asserted to match the loaded model, not hardcoded independently; a predefined-vs-auto-extracted collision keeps the predefined definition and records the merge; a predefined-vs-predefined `name` collision is reported as a conflict (blocking) rather than merged; the recorded merge/conflict entry names both sources
+  - _Requirements: R16.1, R16.3, R1.1; design §6.1, §6.2; open: OQ-17 (parameter `scope` source for the dedup key)_
+
+- [ ] 3. Implement Policy Spec validation (block-on-invalid)
+- [ ] 3.1 Implement structural + referential + DAG validation
+  - Produce a structured `ValidationReport`: schema/shape, referential integrity (`depends_on`, `parameters`, `produced_by`, `motivo.rule_id`, `used_by`), DAG integrity (cycles, orphans, `execution_order` vs `depends_on` mismatch), unknown `logic.type` as a hard error
+  - Block exploration/investigation when any blocking check fails; emit a specific, comprehensible message naming the section/field/rule/edge
+  - Unit tests: valid fixture passes; mutated fixtures (missing field, dangling `depends_on`, injected cycle, unknown `logic.type`, and a predefined-vs-predefined duplicate-parameter collision per task 2) each fail with the right message and do not proceed
+  - _Requirements: R16.2, R1.3; design §7.1, §13_
+
+### Phase 2: Deterministic rule evaluation and dependency discovery
+
+- [ ] 4. Implement the closed, typed rule evaluator
+- [ ] 4.1 Implement `json_extract` and `matrix_lookup`
+  - `json_extract`: read `path` from a synthetic payload, apply `cast` (R001–R003)
+  - `matrix_lookup`: resolve `row_key`/`col_key`, index `matrix` (R008)
+  - Unit tests over known synthetic inputs produce deterministic outputs
+  - _Requirements: R5.1; design §7.2, D-6_
+- [ ] 4.2 Implement `case_when` over a fixed, validated grammar
+  - Parse the condition into the small AST `{var|param|literal} {comparator} {var|param|literal}` joined by `AND`/`OR`, comparators `=,>=,<=,>,<`; first true branch wins else `else`
+  - Reject anything outside the grammar as a validation error (never best-effort); never execute arbitrary/model-generated expressions
+  - Surface R007's inline literal thresholds as read-only derived thresholds (only `parameters` P001/P002 are editable per R2/OQ-5)
+  - Unit tests: R005 (`renda_mensal >= renda_minima`) and R009 branches evaluate deterministically; out-of-grammar expression is rejected
+  - _Requirements: R5.1, R5.10, R2 (OQ-5 scope); design §7.2, D-6_
+
+- [ ] 5. Implement baseline isolation and scenario overlay
+  - Treat the loaded `PolicyModel` as the immutable baseline; represent a `Scenario` as `baseline + ParamOverride[]` applied at eval time (e.g. `{P001: 3000}`)
+  - Unit test: after a scenario run the baseline object is byte-identical (no mutation)
+  - _Requirements: R4.4, R5.9; design §8.1, D-5_
+
+- [ ] 6. Implement reverse dependency discovery over the DAG
+  - From a changed parameter: seed via `used_by`, forward closure via `outputs → consumed_by`, required-upstream via `depends_on` closure; order the execution set by `dag.execution_order` (design §8.2 — do not extend the algorithm beyond this)
+  - Implement objective-first discovery as `PolicyModel.requiredForOutput(outputVar)` (closure from the producing rule)
+  - Distinguish, per design §8.2, the **changed path recomputed for the scenario** (seed + forward closure + its required upstream) from **baseline-reused inputs** (other inputs a downstream rule needs, whose parameters did not change) — the test expectations below rely on this distinction
+  - **Derive the expected set from the real fixture, do not presume it.** The test MUST compute the expected set from the loaded `PolicyModel` (traversing `used_by`/`depends_on`/`inputs`/`outputs`/`consumed_by`) and compare the algorithm's output to that derived set. If the loaded graph does not yield the documented example, the test MUST fail and surface the inconsistency — never edit the expected value or the fixture to force a pass.
+  - Unit tests (all against the real fixture):
+    - **Changed-path set for P001:** expected, derived from the fixture, is {R001, R005, R009} — R005 is the seed (`used_by`), R001 its required upstream (`depends_on`), R009 the forward closure via `status_renda ∈ R009.inputs`. Assert the algorithm reproduces exactly the fixture-derived set.
+    - **Indirect dependency:** R009 is reached only transitively from P001 (P001→R005→`status_renda`→R009), proving indirect-closure handling, not just direct `used_by`.
+    - **Affected vs. not-affected:** R002/R003/R004/R006/R007/R008 are not in the changed-path set for P001; where `resultado` is the comparison target, R009's other inputs (`status_idade`, `status_comprometimento`, `limite_sugerido`) are supplied from the baseline, not recomputed — assert both the "not recomputed" and the "available from baseline" conditions.
+    - **Execution order:** the returned order is consistent with `depends_on` and `dag.execution_order` (R001 before R005 before R009); assert a topological check, not a fixed list only.
+    - **Objective-first:** `requiredForOutput('resultado')` returns the fixture-derived closure of R009 (R009 + its transitive `depends_on`).
+    - **No executable path / insufficient data:** an objective that maps to no producing rule, or whose closure needs an input with no producer and no payload path, yields an explicit "no executable path / insufficient data" outcome (consumed later by task 7's `cannot_calculate` and §13), not a partial silent result.
+    - **Cycles / invalid references:** assert these are rejected earlier by validation (task 3.1) and that discovery is only ever run on a validated model — discovery does not re-handle them.
+  - _Requirements: R5.3, R5.4; design §8.2, §6.2, §7.1_
+
+### Phase 3: Deterministic execution and comparison (SIMULADO)
+
+- [ ] 7. Implement the `ImpactStudyRunner` interface and `SimulatedRunner`
+  - Define `ImpactStudyRunner.runScenario(policyVersion, scenario, affectedSubDag) -> ExecutionResult`
+  - `SimulatedRunner`: execute the evaluator over the affected sub-DAG against a synthetic payload set; always set `mode=SIMULADO`, `status=ok`; perform no real-history comparison
+  - **Scope statement (make explicit in code docs and output):** a `SimulatedRunner` run demonstrates the **deterministic behavior of the rules over synthetic payloads**; it does **not** prove real impact against historical `Motivo de Decisão` data. Preserve the design distinction between execution, validation, and evidence level (§9.3): a run that completed is not, by itself, validated.
+  - Record `ExecutionResult` with `executionId`, `attempt`, `source=deterministic`, `createdAt`; derive `evidenceLevel` via the canonical map (`SIMULADO & ok → simulated`), never set directly; no AI path may write or raise a result
+  - Verifiable acceptance criteria (unit tests, against the real fixture):
+    - every `SimulatedRunner` result has `mode=SIMULADO` and derived `evidenceLevel=simulated` — never `study_validated`; a test asserts there is no code path by which a simulated run reaches `study_validated`
+    - the result object marks itself simulated such that any consumer (comparison task 8, UI task 16) can only render it as SIMULADO — assert the simulated flag is present and non-strippable in the result contract
+    - when no baseline/history is available, the runner/comparison returns an explicit "cannot compare / not available" state and **never** fabricates a baseline or a comparison (ties to task 8)
+    - an evaluator failure yields `status=cannot_calculate` with no substituted/estimated value and `evidenceLevel=none`
+    - a "no executable path / insufficient data" discovery outcome (task 6) maps to `status=cannot_calculate`, not to a partial number
+  - _Requirements: R5.1, R5.5, R5.7, R5.8, R5.10; design §9.1, §9.3, §6.2_
+
+- [ ] 7.1 Thin vertical slice — load → override → discover → simulate → baseline intact (early integration checkpoint)
+  - Integrate the already-built pieces (tasks 2, 3.1, 4, 5, 6, 7) into one minimal headless flow, with **no UI, no AI, no governance** yet, to catch module-interface mismatches early rather than only at task 20
+  - Flow: (1) load + validate the fixture; (2) apply a scenario override (`P001 = 3000`); (3) discover and execute only the required rule subset; (4) obtain an explicitly simulated result; (5) assert the baseline model is unchanged
+  - Integration test asserts the vertical: validation passed; the executed subset equals the fixture-derived changed-path set from task 6; the result is `mode=SIMULADO`/`evidenceLevel=simulated`; the baseline is byte-identical after the run
+  - This is an incremental checkpoint only; it does **not** replace task 20's full end-to-end validation (which adds AI, UI, decision, audit, governance)
+  - _Requirements: R5.1, R5.3, R5.4, R5.9, R16.2 (integrated subset); design §5, §8.1, §8.2, §9.1_
+
+- [ ] 8. Implement baseline-vs-scenario comparison capability
+  - Reusable comparison over `output_vars` (`resultado`, `limite_sugerido`) plus affected `motivos`, run for baseline and scenario; carry the current execution's `evidenceLevel` badge
+  - If baseline results are unavailable, return a "comparison cannot be shown" state (no fabricated comparison)
+  - Unit tests: comparison surfaces both runs with related rules/data context; missing-baseline path returns the explicit state
+  - _Requirements: R6.1, R6.2, R6.3, R6.4; design §9.1, §11_
+
+### Phase 4: Investigation record, findings lifecycle, and audit
+
+- [ ] 9. Implement the append-only InvestigationRecord and finding lifecycle
+- [ ] 9.1 Implement the record and execution history (append-only, in-session)
+  - Append-only `InvestigationRecord` linking hypothesis → params → policy version → scenario(s) → execution(s) → finding(s) → human decision(s); executions referenced by `executionIds[]` + `currentExecutionId`, never overwritten on re-run
+  - Unit tests: a re-run appends a new `ExecutionResult` (incremented `attempt`), prior results remain, `currentExecutionId` points to newest; records are only appended, never rewritten
+  - _Requirements: R14.1, R14.2, R14.3; design §6.2, §10.1, §12_
+- [ ] 9.2 Implement the `Finding` state machine and evidence derivation
+  - Transitions per design §10.1: `suggested → {under_investigation | rejected}`, `under_investigation → {executed | rejected}`, `executed → {accepted | rejected | re-run}`, `accepted → under_investigation` (re-run); evidence derived only from executions
+  - `investigationState` and `evidenceLevel` move independently (accept/reject never changes evidence)
+  - Unit tests: rejection before any execution is allowed and leaves `evidenceLevel=none`; accepting changes state but not evidence
+  - _Requirements: R7.2, R7.4, R8.4, R9.2, R10.1, R10.4; design §10.1, §11_
+
+### Phase 5: AI-assisted investigation (advisory, bounded)
+
+- [ ] 10. Implement hypothesis structuring from intent
+  - Produce a structured hypothesis naming the policy elements involved and the change under test; request clarification when intent is ambiguous/incomplete; present for human confirmation before building a scenario; treat the hypothesis as a proposal only
+  - Build the model prompt from Policy Spec + scenario structure with PII minimized (no raw credit data)
+  - Unit tests: structured hypothesis names elements + change; ambiguous intent triggers a clarification path; no hypothesis is treated as evidence
+  - _Requirements: R3.1, R3.3, R3.4, R3.5; design §5, §10, §12_
+
+- [ ] 11. Implement human confirmation of AI-proposed modifications
+  - Present any AI-proposed modification for explicit confirmation before it enters a scenario; apply the specialist's edited version when edited; never apply without confirmation; confine every modification to an experimental scenario
+  - Unit tests: unconfirmed modification is not applied; edited version overrides the AI proposal; no path applies a modification to production
+  - _Requirements: R4.1, R4.2, R4.3, R4.4; design §5, §11_
+
+- [ ] 12. Implement bounded scenario/finding suggestions
+  - Return at most N ranked suggestions per request (configurable session cap, small default); each born `source=ai_suggestion`, `evidenceLevel=none`; no unbounded stream; no autonomous red-team loop
+  - A finding reaches `evidenceLevel=simulated` only after a deterministic run; "cannot answer" keeps `evidenceLevel=none` and states the limitation
+  - Unit tests: suggestion set is capped; no `ai_suggestion` carries a numeric impact or evidence above `none` without an `ExecutionResult`
+  - _Requirements: R7.1, R7.3, R8.1, R8.2, R8.3; design §10, §9.3_
+
+- [ ] 13. Implement finding → investigable scenario
+  - Turn a relevant finding into a scenario that goes through the same confirmation + execution + evidence path; default to explicit specialist action to launch execution (OQ-8 default)
+  - Unit tests: a finding-derived scenario routes through confirmation/execution/evidence like any other; no auto-advance to a committed change
+  - _Requirements: R9.1, R9.2, R9.3; design §10, §11_
+
+### Phase 6: Interface
+
+- [ ] 14. Implement policy exploration and DAG visualization
+  - Render rules, variables, parameters, dependencies, and `motivos` from the loaded Policy Spec; indicate each element's SYN area (Extraction/ETL/Hard filters/Final base); make each element's origin traceable; show the explicit "cannot be explored" state on invalid/unavailable policy
+  - Component tests for rendering and the error/empty states
+  - _Requirements: R1.1, R1.2, R1.3, R1.4; design §4, §7.1_
+
+- [ ] 15. Implement the hybrid what-if editor and investigation entry points
+  - Visual parameter editing for supported `parameters` (P001/P002) with preview and baseline/scenario diff; natural-language hypothesis entry; both as one unified experience; two entry points (visual exploration / business question) without forcing a choice up front
+  - Component tests: editing P001 produces a scenario overlay and a diff without mutating baseline; both entry points reach a structured hypothesis
+  - _Requirements: R2.1, R2.2, R2.3, R2.4, R2.5; design §4, §5, §8.1_
+
+- [ ] 16. Implement results, evidence badges, and human decision UI
+  - Present comparison and findings with explicit evidence-level badges: `none` ("Hipótese sem comprovação"), `simulated` ("Resultado SIMULADO — não é impacto real", persistent badge on every number), `study_validated` label reserved for real validated runs; badge derived from current execution `status`+`mode`
+  - Accept/reject findings and select a scenario as promising (enables the deterministic tail only on explicit selection); accepting is never read as production approval
+  - Component tests: a simulated number never renders without the SIMULADO badge; accept/reject updates state but not evidence; selection gates the tail
+  - _Requirements: R7.4, R10.1, R10.2, R10.3, R10.4; design §11, §9.3_
+
+### Phase 7: Governance, privacy, and FinOps
+
+- [ ] 17. Implement the authorization boundary and model-privacy minimization
+  - Route all credit-data and policy/dataset access through an injected authorization boundary with a **simplified demo role set** (design §12, D-8)
+  - **Scope statement (make explicit):** this is the MVP's simplified, injected access control for the demo — it is **not** a real integration with corporate identity/authorization. Reuse of real governance/identity is a separate, gated concern (R15 scope note, OQ-11) and is **not** implemented here. Do not claim full enterprise governance.
+  - Keep the authorization boundary as a single injectable seam so the real mechanism can replace it later without touching callers
+  - Verifiable acceptance criteria (unit tests):
+    - an unauthorized request for a policy or dataset is refused and **no protected data is exposed** in the response or in any error payload
+    - access to a policy and to a dataset each pass through the defined authorization boundary (assert the boundary is invoked on every such path; no bypass path exists)
+    - the AI prompt builder includes **no raw `Motivo de Decisão` rows** and no unnecessary personal data — assert prompts are built only from Policy Spec/scenario structure + synthetic payloads
+    - an authorization failure is surfaced **as an authorization failure**, never as "no data"/empty-result, and is not worked around by any alternative flow (assert the failure type is distinct from the empty/unavailable states of tasks 7/8/18)
+  - _Requirements: R15.1, R15.2, R15.3; design §12, D-8; real identity is OQ-11 (not in MVP)_
+
+- [ ] 18. Implement FinOps session cap and reliability states
+  - Enforce the per-session cap on AI investigations (from task 12) and surface a per-hypothesis cost indicator; implement the reliability states (external capability unavailable → state the limitation, never fabricate)
+  - Unit tests: cap is enforced; unavailable-dependency path communicates the limitation and fabricates nothing
+  - _Requirements: NFR FinOps, NFR reliability/integrity, R5.7; design §12, §13_
+
+- [ ] 19. Implement progress feedback and domain-context staleness signaling
+  - Keep the specialist informed of progress while an execution runs; where a domain-context artifact is used, signal potential staleness and never silently present it as current
+  - Component/unit tests: progress state shown during a run; stale/unknown context raises a visible uncertainty indicator
+  - _Requirements: NFR performance (progress), R13.1, R13.2, R13.3; design §12, §13, §15_
+
+### Phase 8: End-to-end validation (MVP core)
+
+- [ ] 20. Wire and validate the full worked-example flow (R005/P001, SIMULADO)
+  - Integrate modules end to end for "renda mínima 2500 → 3000": structure hypothesis → confirm → scenario overlay → reverse discovery (R001→R005→R009) → SimulatedRunner → baseline/scenario comparison → bounded AI suggestions → accept/reject → recorded investigation
+  - End-to-end tests assert the design invariants: deterministic-only impact, SIMULADO labeling everywhere, state/evidence separation, append-only history, no production effect
+  - _Requirements: R1–R10, R14, R16 (integrated); design §5, §14_
+
+---
+
+## Conditional tasks (gated by an open question / SYN access — not started until resolved)
+
+These correspond to the ◑ rows in design §14.1. They are explicitly out of the MVP-core start set and must not be begun until the gate is resolved by a human decision.
+
+- [ ] C1. **[CONDITIONAL — OQ-4]** Implement `SynStudyRunner` (real deterministic execution)
+  - Behind the same `ImpactStudyRunner` interface; drive real studies, compare the final base against `Motivo de Decisão` using `validation_map`/`output_vars`; implement the §9.3 validation step producing `status ∈ {validated, executed_unvalidated, validation_failed}` and `ValidationOutcome`
+  - Validation thresholds/method are themselves gated by **OQ-6**; do not invent tolerances
+  - _Requirements: R5.5, R5.6; design §9.1, §9.3 — gated by OQ-4, OQ-6_
+
+- [ ] C2. **[CONDITIONAL — OQ-9 / risk R-6]** Implement code + tests generation (SYN conventions)
+  - **Gate:** not started until a human resolves OQ-9 and confirms the actual SYN repository, skills, and conventions are reachable. Do **not** presume Kiro has that access; do **not** stand up a fictional integration or claim it works.
+  - Only for a human-selected, human-reviewed scenario; when the real SYN access is confirmed, generate functional policy code and tests consistent with the real SYN repo structure and reuse SYN skills where applicable
+  - **Fallback (always available, no SYN access needed):** produce a clearly-labeled demonstration artifact (diff + tests) that is explicitly **not** submitted anywhere — never presented as validated against real SYN
+  - Whether a real PR is required for the hackathon is a human decision (not decided here)
+  - _Requirements: R11.1, R11.2, R11.3, R11.4; design §9.2 — gated by OQ-9/R-6_
+
+- [ ] C3. **[CONDITIONAL — OQ-9 / risk R-6]** Implement pull-request creation (review-only)
+  - **Gate:** not started until a human resolves OQ-9 and the repository access + PR mechanics are confirmed available. Do **not** presume repo access; do **not** simulate a PR as if real.
+  - When confirmed: open a PR against the appropriate SYN repository as a **review request only** (never merge/deploy); report failure explicitly; keep the PR traceable to scenario/evidence/selection
+  - **Fallback:** present the PR intent + the traceable package (scenario → evidence → selection → diff) **without opening a real PR**, clearly labeled as not submitted
+  - The real-PR requirement is a human call tied to OQ-9 and access availability; this plan does not decide it for the user
+  - _Requirements: R12.1, R12.2, R12.3, R12.4; design §9.2 — gated by OQ-9/R-6_
+
+- [ ] C4. **[CONDITIONAL — OQ-16 / OQ-10]** Implement cross-session persistence / exportable audit
+  - Persist the InvestigationRecord across sessions and/or export it, if the demo requires it (MVP guarantees only in-session append-only history)
+  - _Requirements: R14 (depth); design §12 — gated by OQ-16, OQ-10_
+
+- [ ] C5. **[CONDITIONAL — OQ-2 / OQ-15]** Adapt the loader/validator to the real Policy Spec schema
+  - Reconcile the fixture-based contract with the real upstream Policy Spec schema and freshness source once confirmed
+  - _Requirements: R1, R13, R16; design §6, §15 — gated by OQ-2/OQ-15_
+
+---
+
+## Requirements coverage check (every requirement maps to a task)
+
+| Requirement | Task(s) |
+|-------------|---------|
+| R1 Policy exploration | 2, 3, 14 |
+| R2 Two entry points / hybrid | 15 |
+| R3 Hypothesis structuring | 10 |
+| R4 Human confirmation | 5, 11 |
+| R5 Deterministic impact (SIMULADO core) | 4, 5, 6, 7, 7.1 (+ C1 for real) |
+| R6 Baseline vs scenario | 8 |
+| R7 Evidence / proven-unproven | 9.2, 12, 16 |
+| R8 AI discovery (bounded) | 12 |
+| R9 Finding → scenario | 13 |
+| R10 Human decision | 9.2, 16 |
+| R11 Code+tests | C2 |
+| R12 Pull request | C3 |
+| R13 Domain-context freshness | 19 (+ C5) |
+| R14 Traceability/audit | 9.1 (+ C4 for persistence/export) |
+| R15 Governed data / privacy | 17 |
+| R16 Consume+validate Policy Spec | 2, 3 (+ C5 real schema) |
+| NFR lead-time | served by the integrated flow (task 20); measurement OQ-13 |
+| NFR usability (no code) | 10, 15 |
+| NFR performance (progress) | 19 |
+| NFR FinOps | 12, 18 |
+| NFR reliability/integrity | 7, 18 |
+
+Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional and carry their gating OQ/risk; nothing architecturally foreseen but un-gated is presented as MVP-core work.
+
+---
+
+## Open item surfaced during this Tasks revision (needs human decision — not resolved by assumption)
+
+- **OQ-17 — parameter dedup key.** Design §6.2 and task 2 dedup parameters by `(name, scope)`, but the fixture's `parameters` carry no `scope` field (scope exists only on `rules`/`motivos`), so the source of a parameter's `scope` for the dedup key is undefined. Task 2 therefore applies a **provisional, fixture-scoped** behavior (key by `name` while `scope` is absent; predefined-vs-predefined collisions are blocking; all merges/conflicts stay traceable). Resolution rules:
+  - the **definitive** dedup key depends on confirmation of the **real Policy Spec contract** or an explicit, evidence-based human decision — it is **not** to be resolved by assumption;
+  - the fixture's missing `scope` **must not be "fixed" silently**, and the fixture's absence of `scope` **must not be used to infer** how the real system behaves (the provisional `name`-only key is a demo fallback, not a model of production);
+  - the provisional strategy is explicitly **not** the definitive rule for the real schema;
+  - adapting to the real schema remains gated by the already-registered questions, **especially OQ-2 (real Policy Spec owner/availability/freshness) and OQ-15 (minimal real structure/validation)**, and is carried out under conditional task **C5**.
+  This is a documentation/decision gap, **not a blocker** for starting the MVP-core tasks on the synthetic fixture, because the provisional behavior is explicitly delimited above.
+
+## Approval Gate
+
+This is the Tasks phase deliverable. Per the Kiro Specs workflow, implementation does not begin until this plan is explicitly approved. On approval, tasks are executed in order; conditional tasks (C1–C5) stay blocked until their gating open question is resolved by a human decision.

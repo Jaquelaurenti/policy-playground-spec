@@ -1,0 +1,588 @@
+{
+  "policy": {
+    "id": "microcredito-demo",
+    "name": "Microcrédito — Política Sintética para Playground",
+    "squad": "demo",
+    "mode": "sql",
+    "source_commit": "synthetic-demo-v1",
+    "extracted_at": "2026-10-13T00:00:00Z",
+    "description": "Fixture totalmente fictício. Não contém regras ou dados reais de instituição financeira."
+  },
+  "stages": [
+    {
+      "id": "01",
+      "name": "Extração",
+      "notebooks": [
+        {
+          "id": "0101",
+          "file": "01_extracao.sql",
+          "output_table": "demo_stage_01",
+          "input_tables": [
+            "demo_payload"
+          ],
+          "rule_ids": [
+            "R001",
+            "R002",
+            "R003"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "Elegibilidade",
+      "notebooks": [
+        {
+          "id": "0201",
+          "file": "02_elegibilidade.sql",
+          "output_table": "demo_stage_02",
+          "input_tables": [
+            "demo_stage_01"
+          ],
+          "rule_ids": [
+            "R004",
+            "R005",
+            "R006"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "Oferta",
+      "notebooks": [
+        {
+          "id": "0301",
+          "file": "03_oferta.sql",
+          "output_table": "demo_stage_03",
+          "input_tables": [
+            "demo_stage_02"
+          ],
+          "rule_ids": [
+            "R007",
+            "R008"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "Consolidação",
+      "notebooks": [
+        {
+          "id": "0401",
+          "file": "04_consolidacao.sql",
+          "output_table": "demo_stage_04",
+          "input_tables": [
+            "demo_stage_03"
+          ],
+          "rule_ids": [
+            "R009"
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "R001",
+      "name": "Extrair renda mensal",
+      "type": "extraction",
+      "stage_id": "01",
+      "notebook_id": "0101",
+      "description": "Extrair renda mensal (exemplo fictício)",
+      "logic": {
+        "type": "json_extract",
+        "path": "$.cliente.renda_mensal",
+        "cast": "number"
+      },
+      "inputs": [],
+      "outputs": [
+        "renda_mensal"
+      ],
+      "depends_on": [],
+      "parameters": [],
+      "source": {
+        "file": "01_extracao.sql",
+        "cell_index": 1
+      }
+    },
+    {
+      "id": "R002",
+      "name": "Extrair idade",
+      "type": "extraction",
+      "stage_id": "01",
+      "notebook_id": "0101",
+      "description": "Extrair idade (exemplo fictício)",
+      "logic": {
+        "type": "json_extract",
+        "path": "$.cliente.idade",
+        "cast": "number"
+      },
+      "inputs": [],
+      "outputs": [
+        "idade"
+      ],
+      "depends_on": [],
+      "parameters": [],
+      "source": {
+        "file": "01_extracao.sql",
+        "cell_index": 2
+      }
+    },
+    {
+      "id": "R003",
+      "name": "Extrair comprometimento percentual",
+      "type": "extraction",
+      "stage_id": "01",
+      "notebook_id": "0101",
+      "description": "Extrair comprometimento percentual (exemplo fictício)",
+      "logic": {
+        "type": "json_extract",
+        "path": "$.cliente.comprometimento_pct",
+        "cast": "number"
+      },
+      "inputs": [],
+      "outputs": [
+        "comprometimento_pct"
+      ],
+      "depends_on": [],
+      "parameters": [],
+      "source": {
+        "file": "01_extracao.sql",
+        "cell_index": 3
+      }
+    },
+    {
+      "id": "R004",
+      "name": "Validar maioridade",
+      "type": "filter",
+      "stage_id": "02",
+      "notebook_id": "0201",
+      "description": "Validar maioridade (exemplo fictício)",
+      "logic": {
+        "type": "case_when",
+        "branches": [
+          {
+            "when": "idade >= 18",
+            "then": "ELEGIVEL"
+          }
+        ],
+        "else": "REPROVADO"
+      },
+      "inputs": [
+        "idade"
+      ],
+      "outputs": [
+        "status_idade"
+      ],
+      "depends_on": [
+        "R002"
+      ],
+      "parameters": [],
+      "source": {
+        "file": "02_elegibilidade.sql",
+        "cell_index": 4
+      },
+      "motivo_code": 101,
+      "motivo_name": "Idade insuficiente",
+      "scope": "proponente"
+    },
+    {
+      "id": "R005",
+      "name": "Validar renda mínima",
+      "type": "filter",
+      "stage_id": "02",
+      "notebook_id": "0201",
+      "description": "Validar renda mínima (exemplo fictício)",
+      "logic": {
+        "type": "case_when",
+        "branches": [
+          {
+            "when": "renda_mensal >= renda_minima",
+            "then": "ELEGIVEL"
+          }
+        ],
+        "else": "REPROVADO"
+      },
+      "inputs": [
+        "renda_mensal",
+        "renda_minima"
+      ],
+      "outputs": [
+        "status_renda"
+      ],
+      "depends_on": [
+        "R001"
+      ],
+      "parameters": [
+        "P001"
+      ],
+      "source": {
+        "file": "02_elegibilidade.sql",
+        "cell_index": 5
+      },
+      "motivo_code": 102,
+      "motivo_name": "Renda insuficiente",
+      "scope": "proponente"
+    },
+    {
+      "id": "R006",
+      "name": "Validar comprometimento",
+      "type": "filter",
+      "stage_id": "02",
+      "notebook_id": "0201",
+      "description": "Validar comprometimento (exemplo fictício)",
+      "logic": {
+        "type": "case_when",
+        "branches": [
+          {
+            "when": "comprometimento_pct <= comprometimento_max_pct",
+            "then": "ELEGIVEL"
+          }
+        ],
+        "else": "REPROVADO"
+      },
+      "inputs": [
+        "comprometimento_pct",
+        "comprometimento_max_pct"
+      ],
+      "outputs": [
+        "status_comprometimento"
+      ],
+      "depends_on": [
+        "R003"
+      ],
+      "parameters": [
+        "P002"
+      ],
+      "source": {
+        "file": "02_elegibilidade.sql",
+        "cell_index": 6
+      },
+      "motivo_code": 103,
+      "motivo_name": "Comprometimento excessivo",
+      "scope": "proponente"
+    },
+    {
+      "id": "R007",
+      "name": "Classificar faixa",
+      "type": "classification",
+      "stage_id": "03",
+      "notebook_id": "0301",
+      "description": "Classificar faixa (exemplo fictício)",
+      "logic": {
+        "type": "case_when",
+        "branches": [
+          {
+            "when": "renda_mensal >= 5000",
+            "then": "ALTA"
+          },
+          {
+            "when": "renda_mensal >= 3000",
+            "then": "MEDIA"
+          }
+        ],
+        "else": "BASICA"
+      },
+      "inputs": [
+        "renda_mensal"
+      ],
+      "outputs": [
+        "faixa"
+      ],
+      "depends_on": [
+        "R001"
+      ],
+      "parameters": [],
+      "source": {
+        "file": "03_oferta.sql",
+        "cell_index": 7
+      }
+    },
+    {
+      "id": "R008",
+      "name": "Consultar matriz de oferta",
+      "type": "lookup",
+      "stage_id": "03",
+      "notebook_id": "0301",
+      "description": "Consultar matriz de oferta (exemplo fictício)",
+      "logic": {
+        "type": "matrix_lookup",
+        "row_key": "faixa",
+        "col_key": "perfil",
+        "matrix": {
+          "BASICA": {
+            "A": 1000,
+            "B": 500
+          },
+          "MEDIA": {
+            "A": 3000,
+            "B": 1500
+          },
+          "ALTA": {
+            "A": 5000,
+            "B": 2500
+          }
+        },
+        "col_labels": [
+          "A",
+          "B"
+        ]
+      },
+      "inputs": [
+        "faixa",
+        "perfil"
+      ],
+      "outputs": [
+        "limite_sugerido"
+      ],
+      "depends_on": [
+        "R007"
+      ],
+      "parameters": [],
+      "source": {
+        "file": "03_oferta.sql",
+        "cell_index": 8
+      }
+    },
+    {
+      "id": "R009",
+      "name": "Consolidar resultado",
+      "type": "transformation",
+      "stage_id": "04",
+      "notebook_id": "0401",
+      "description": "Consolidar resultado (exemplo fictício)",
+      "logic": {
+        "type": "case_when",
+        "branches": [
+          {
+            "when": "status_idade = 'ELEGIVEL' AND status_renda = 'ELEGIVEL' AND status_comprometimento = 'ELEGIVEL'",
+            "then": "APROVACAO_SIMULADA"
+          }
+        ],
+        "else": "REPROVACAO_SIMULADA"
+      },
+      "inputs": [
+        "status_idade",
+        "status_renda",
+        "status_comprometimento",
+        "limite_sugerido"
+      ],
+      "outputs": [
+        "resultado"
+      ],
+      "depends_on": [
+        "R004",
+        "R005",
+        "R006",
+        "R008"
+      ],
+      "parameters": [],
+      "source": {
+        "file": "04_consolidacao.sql",
+        "cell_index": 9
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V001",
+      "name": "renda_mensal",
+      "data_type": "number",
+      "category": "input",
+      "produced_by": "R001",
+      "payload_path": "$.cliente.renda_mensal"
+    },
+    {
+      "id": "V002",
+      "name": "idade",
+      "data_type": "number",
+      "category": "input",
+      "produced_by": "R002",
+      "payload_path": "$.cliente.idade"
+    },
+    {
+      "id": "V003",
+      "name": "comprometimento_pct",
+      "data_type": "number",
+      "category": "input",
+      "produced_by": "R003",
+      "payload_path": "$.cliente.comprometimento_pct"
+    },
+    {
+      "id": "V004",
+      "name": "status_idade",
+      "data_type": "string",
+      "category": "derived",
+      "produced_by": "R004"
+    },
+    {
+      "id": "V005",
+      "name": "status_renda",
+      "data_type": "string",
+      "category": "derived",
+      "produced_by": "R005"
+    },
+    {
+      "id": "V006",
+      "name": "status_comprometimento",
+      "data_type": "string",
+      "category": "derived",
+      "produced_by": "R006"
+    },
+    {
+      "id": "V007",
+      "name": "faixa",
+      "data_type": "string",
+      "category": "derived",
+      "produced_by": "R007"
+    },
+    {
+      "id": "V008",
+      "name": "limite_sugerido",
+      "data_type": "number",
+      "category": "derived",
+      "produced_by": "R008"
+    },
+    {
+      "id": "V009",
+      "name": "resultado",
+      "data_type": "string",
+      "category": "output",
+      "produced_by": "R009"
+    },
+    {
+      "id": "V010",
+      "name": "perfil",
+      "data_type": "string",
+      "category": "input",
+      "produced_by": "external",
+      "payload_path": "$.cliente.perfil"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "P001",
+      "name": "renda_minima",
+      "description": "Corte de renda editável no what-if",
+      "value": 2500,
+      "unit": "BRL",
+      "used_by": [
+        "R005"
+      ]
+    },
+    {
+      "id": "P002",
+      "name": "comprometimento_max_pct",
+      "description": "Limite de comprometimento",
+      "value": 35,
+      "unit": "%",
+      "used_by": [
+        "R006"
+      ]
+    }
+  ],
+  "dag": {
+    "tables": [
+      {
+        "name": "demo_stage_01",
+        "stage": "01",
+        "produced_by": "01",
+        "input_tables": [
+          "demo_payload"
+        ]
+      },
+      {
+        "name": "demo_stage_02",
+        "stage": "02",
+        "produced_by": "02",
+        "input_tables": [
+          "demo_stage_01"
+        ]
+      },
+      {
+        "name": "demo_stage_03",
+        "stage": "03",
+        "produced_by": "03",
+        "input_tables": [
+          "demo_stage_02"
+        ]
+      },
+      {
+        "name": "demo_stage_04",
+        "stage": "04",
+        "produced_by": "04",
+        "input_tables": [
+          "demo_stage_03"
+        ]
+      }
+    ],
+    "execution_order": [
+      [
+        "R001",
+        "R002",
+        "R003"
+      ],
+      [
+        "R004",
+        "R005",
+        "R006"
+      ],
+      [
+        "R007"
+      ],
+      [
+        "R008"
+      ],
+      [
+        "R009"
+      ]
+    ]
+  },
+  "motivos": [
+    {
+      "code": 101,
+      "name": "Idade insuficiente",
+      "scope": "proponente",
+      "stage": "02",
+      "rule_id": "R004"
+    },
+    {
+      "code": 102,
+      "name": "Renda insuficiente",
+      "scope": "proponente",
+      "stage": "02",
+      "rule_id": "R005"
+    },
+    {
+      "code": 103,
+      "name": "Comprometimento excessivo",
+      "scope": "proponente",
+      "stage": "02",
+      "rule_id": "R006"
+    }
+  ],
+  "validation_map": [
+    {
+      "variable": "limite_sugerido",
+      "athena_col": "limite_sugerido_demo",
+      "script_key": "limite_sugerido",
+      "dmp_key": "limiteDemo",
+      "type": "numeric",
+      "tolerance": 0.01
+    }
+  ],
+  "output_vars": [
+    {
+      "name": "resultado",
+      "athena_col": "resultado_demo",
+      "cast": "string"
+    },
+    {
+      "name": "limite_sugerido",
+      "athena_col": "limite_sugerido_demo",
+      "cast": "double"
+    }
+  ]
+}
