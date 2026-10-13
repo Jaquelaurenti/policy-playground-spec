@@ -1,6 +1,6 @@
 # Policy Playground
 
-*Explore o que você já sabe, descubra o que você não sabe.*
+_Explore o que você já sabe, descubra o que você não sabe._
 
 # 1. Press Release
 
@@ -15,10 +15,8 @@ Até agora, testar uma hipótese simples, como subir a renda mínima de R$ 2.500
 Com o Policy Playground, o especialista abre a política e diz o que quer testar. O agente transforma essa intenção em uma hipótese estruturada, aciona os estudos atuais, que continuam sendo a fonte de verdade do cálculo, e apresenta o impacto com evidências rastreáveis. Ao mesmo tempo, a IA desafia a política e sugere novos cenários para investigar. A decisão continua sempre com o especialista.
 
 > "Queremos que o conhecimento de negócio chegue à evidência sem passar por uma fila técnica. A IA acelera a investigação, mas quem decide continua sendo o especialista." — Liderança de Crédito PF (citação ilustrativa)
-> 
 
 > "Eu levava dias para saber o impacto de uma mudança de corte. Agora testo na hora e ainda recebo cenários que eu não teria pensado em olhar." — Especialista de políticas de crédito (citação ilustrativa)
-> 
 
 **Como começar:** o especialista acessa o Policy Playground, escolhe uma política e escreve a primeira hipótese.
 
@@ -30,12 +28,12 @@ Com o Policy Playground, o especialista abre a política e diz o que quer testar
 
 **Cliente principal: o especialista de políticas de crédito.** Ele domina a regra de negócio, mas não escreve SQL/Python no dia a dia. É quem quer mudar a política e hoje depende de outras pessoas para testar essa mudança.
 
-| Perfil | Papel | O que precisa do Playground |
-| --- | --- | --- |
-| **Especialista de políticas (principal)** | Formula hipóteses e propõe mudanças | Testar a intenção sem código e entender as consequências antes de decidir |
-| Analistas de estudos e dados (secundário) | Executam e reproduzem estudos | Menos pedidos avulsos e estudos reutilizados de forma governada |
-| Aprovadores de política e risco (secundário) | Decidem se a mudança segue | Evidência rastreável para aprovar ou rejeitar |
-| Engenharia do motor de decisão (secundário) | Implementa a política | Especificação sem ambiguidade e, no futuro, código e testes gerados |
+| Perfil                                       | Papel                               | O que precisa do Playground                                               |
+| -------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
+| **Especialista de políticas (principal)**    | Formula hipóteses e propõe mudanças | Testar a intenção sem código e entender as consequências antes de decidir |
+| Analistas de estudos e dados (secundário)    | Executam e reproduzem estudos       | Menos pedidos avulsos e estudos reutilizados de forma governada           |
+| Aprovadores de política e risco (secundário) | Decidem se a mudança segue          | Evidência rastreável para aprovar ou rejeitar                             |
+| Engenharia do motor de decisão (secundário)  | Implementa a política               | Especificação sem ambiguidade e, no futuro, código e testes gerados       |
 
 **Beneficiário organizacional:** a operação de crédito, que passa a ter um único fluxo ligando intenção, evidência, decisão e implementação.
 
@@ -97,7 +95,7 @@ O especialista usa uma única experiência, sem escolher entre modos. Ele testa 
 
 **Exemplo**
 
-O especialista escreve: *"Quero testar o que acontece se a renda mínima passar de R$ 2.500 para R$ 3.000."* O Playground estrutura a hipótese, aciona o estudo correspondente e mostra o impacto. Em seguida, desafia a política e encontra, por exemplo, uma combinação de regras que a hipótese original não cobria. Esse finding vira um cenário explorável, e o especialista decide se ele é relevante.
+O especialista escreve: _"Quero testar o que acontece se a renda mínima passar de R$ 2.500 para R$ 3.000."_ O Playground estrutura a hipótese, aciona o estudo correspondente e mostra o impacto. Em seguida, desafia a política e encontra, por exemplo, uma combinação de regras que a hipótese original não cobria. Esse finding vira um cenário explorável, e o especialista decide se ele é relevante.
 
 ### Quando a IA erra ou gera ruído
 
@@ -109,13 +107,13 @@ O especialista escreve: *"Quero testar o que acontece se a renda mínima passar 
 
 # 3. Métricas de sucesso
 
-| Métrica | Linha de base | Meta |
-| --- | --- | --- |
-| Lead time entre hipótese e evidência | 3 dias  | 1 dia |
-| Handoffs por hipótese | 3 | 1 (o próprio especialista) |
-| % de hipóteses testadas sem apoio técnico | 25 %  | 75 % |
-| % de findings da IA marcados como relevantes | — | 55 % |
-| Comportamentos não previstos detectados antes da produção | 33 % | 60 % |
+| Métrica                                                   | Linha de base | Meta                       |
+| --------------------------------------------------------- | ------------- | -------------------------- |
+| Lead time entre hipótese e evidência                      | 3 dias        | 1 dia                      |
+| Handoffs por hipótese                                     | 3             | 1 (o próprio especialista) |
+| % de hipóteses testadas sem apoio técnico                 | 25 %          | 75 %                       |
+| % de findings da IA marcados como relevantes              | —             | 55 %                       |
+| Comportamentos não previstos detectados antes da produção | 33 %          | 60 %                       |
 
 ---
 
@@ -172,13 +170,13 @@ Porque o especialista não deveria ter que decidir de antemão se quer testar ou
 
 **Quais são os principais riscos e como mitigamos?**
 
-| Risco | Mitigação |
-| --- | --- |
-| Alucinação ou finding sem base | O cálculo é sempre feito pelos estudos determinísticos, e um finding só vira fato com evidência rastreável |
-| Dados sensíveis (LGPD) | Uso apenas de dados governados, acesso por perfil e minimização de dados pessoais nas interações com o modelo |
-| Custo de inferência (FinOps) | Limite de investigações por sessão, reaproveitamento de resultados e monitoramento do custo por hipótese |
-| Governança e auditoria | Registro de hipótese, estudo, dados e decisão, com aprovação humana obrigatória |
-| Excesso de findings | Priorização por impacto, limite por sessão e feedback do especialista |
+| Risco                          | Mitigação                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Alucinação ou finding sem base | O cálculo é sempre feito pelos estudos determinísticos, e um finding só vira fato com evidência rastreável    |
+| Dados sensíveis (LGPD)         | Uso apenas de dados governados, acesso por perfil e minimização de dados pessoais nas interações com o modelo |
+| Custo de inferência (FinOps)   | Limite de investigações por sessão, reaproveitamento de resultados e monitoramento do custo por hipótese      |
+| Governança e auditoria         | Registro de hipótese, estudo, dados e decisão, com aprovação humana obrigatória                               |
+| Excesso de findings            | Priorização por impacto, limite por sessão e feedback do especialista                                         |
 
 **O que fica fora do escopo do MVP?**
 
@@ -201,4 +199,4 @@ O Policy Playground cria uma nova interface para a engenharia de políticas de c
 
 **EXPLORAR → DESAFIAR → PROVAR → DECIDIR → EVOLUIR**
 
-*Policy Playground — Working Backwards | AWS Builders League*
+_Policy Playground — Working Backwards | AWS Builders League_

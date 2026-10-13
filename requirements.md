@@ -3,8 +3,8 @@
 ## Document Information
 
 - **Feature Name**: Policy Playground
-- **Version**: 1.0 (approved)
-- **Status**: Requirements approved — Design phase (investigation) in progress; no tasks.md or implementation until Design is explicitly approved
+- **Version**: 1.1 (revision under review; 1.0 approved)
+- **Status**: Requirements 1.0 approved. Design 1.0 and Tasks draft exist. Revision 1.1 (see _Revision History_) awaits approval; no implementation has started.
 - **Approval**: Requirements 1.0 approved with all 16 requirements
 - **Context source**: AWS Builders League hackathon; SYN credit-policy environment
 
@@ -36,7 +36,7 @@ An interactive, evidence-based environment for exploring SYN credit policies, te
 - Turning a relevant finding into an investigable scenario.
 - Distinguishing evidence-backed conclusions from unsupported or inconclusive hypotheses, including communicating when available studies cannot answer a question.
 - Human review and selection of a promising change.
-- Generation of code and appropriate tests consistent with existing SYN repository structure and conventions, and opening a pull request for human review.
+- **Demonstrative tail (stretch, gated):** generation of code and appropriate tests consistent with existing SYN repository structure and conventions, and opening a pull request for human review. In the MVP this is demonstrated as a labeled, non-submitted change artifact; generating SYN-consistent code and opening a real pull request are delivered only if SYN repository access is confirmed (OQ-9). This aligns with the Working Backwards document, which places implementation (step 9) after the MVP core.
 - Keeping the domain-context artifact aligned with relevant policy changes.
 
 **Out of scope (MVP):**
@@ -65,13 +65,13 @@ The requirements below separate three things explicitly, so Design does not inhe
 
 ### Actors
 
-| Actor | Goal in the Playground |
-|------|------------------------|
-| **Credit policy specialist** (primary) | Explore a policy, form and test hypotheses without writing code, understand impact with evidence, decide whether a change is promising, and initiate a reviewed code change. |
-| **Policy / risk approver** (secondary) | Review traceable evidence to judge whether a proposed change should advance. |
-| **Study / data analyst** (secondary) | Benefit from reuse of governed studies and fewer ad-hoc requests. |
-| **Decision-engine / SYN engineer** (secondary) | Receive an unambiguous proposed change as a reviewable pull request following SYN conventions. |
-| **AI agent capability** (system actor) | Interpret intent, structure hypotheses, select studies/tools, propose investigations, analyze outputs, explain findings — never calculate impact or decide. |
+| Actor                                          | Goal in the Playground                                                                                                                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Credit policy specialist** (primary)         | Explore a policy, form and test hypotheses without writing code, understand impact with evidence, decide whether a change is promising, and initiate a reviewed code change. |
+| **Policy / risk approver** (secondary)         | Review traceable evidence to judge whether a proposed change should advance.                                                                                                 |
+| **Study / data analyst** (secondary)           | Benefit from reuse of governed studies and fewer ad-hoc requests.                                                                                                            |
+| **Decision-engine / SYN engineer** (secondary) | Receive an unambiguous proposed change as a reviewable pull request following SYN conventions.                                                                               |
+| **AI agent capability** (system actor)         | Interpret intent, structure hypotheses, select studies/tools, propose investigations, analyze outputs, explain findings — never calculate impact or decide.                  |
 
 Throughout this document, "the Playground" is the system under specification.
 
@@ -89,7 +89,7 @@ Throughout this document, "the Playground" is the system under specification.
 4. WHEN a specialist views a policy element THEN the Playground SHALL make the originating evidence or definition for that element traceable (viewable or linkable), rather than presenting it without provenance.
 
 - **Priority**: High
-- **Dependencies**: Requirement 16 (consolidated Policy Spec). Open Question OQ-1 (which policy). `[Feasibility: Design]` for how policy content is sourced from the Policy Spec.
+- **Dependencies**: Requirement 16 (consolidated Policy Spec). Open Question OQ-1 (which policy). Open Question OQ-18 (mapping of Policy Spec stages to the four SYN areas, for criterion 2). `[Feasibility: Design]` for how policy content is sourced from the Policy Spec.
 
 ### Requirement 2: Two entry points into an investigation
 
@@ -193,9 +193,11 @@ Throughout this document, "the Playground" is the system under specification.
 2. WHEN the Playground proposes additional scenarios THEN it SHALL present a bounded set of suggestions for the specialist to review, rather than an open-ended or unbounded stream.
 3. WHEN the Playground proposes an additional scenario THEN it SHALL present it as a suggestion for the specialist to accept or reject, not as a decision or a proven result.
 4. WHEN a specialist marks a proposed scenario or finding as relevant or irrelevant THEN the Playground SHALL record that assessment.
+5. WHEN a scenario changes a parameter THEN the Playground SHALL derive candidate findings deterministically from the Policy Spec, covering at least (a) rules outside the changed path that read the same input variables as the changed rule, and (b) rule branches or lookup entries that become unreachable, or newly reachable, under the scenario compared with the baseline; these candidates SHALL be produced by analysis of the Policy Spec, not by the AI model.
+6. WHEN the Playground ranks suggestions THEN it SHALL take into account the relevance assessments previously recorded under criterion 4, so that the specialist's feedback influences which suggestions are shown first.
 
 - **Priority**: Medium
-- **Scope note**: The MVP requires a bounded, human-reviewed set of suggestions. It does not require a sophisticated autonomous red-team system or complex configurable investigation limits.
+- **Scope note**: The MVP requires a bounded, human-reviewed set of suggestions. It does not require a sophisticated autonomous red-team system or complex configurable investigation limits. Criteria 5 and 6 make discovery reach beyond the changed path (the Working Backwards "o que ninguém perguntou" problem) and make feedback useful for prioritization, as promised in the Working Backwards FAQ, without adding an autonomous loop.
 - **Dependencies**: Known concern — excessive/low-value findings.
 
 ### Requirement 9: Turning a finding into an investigable scenario
@@ -236,7 +238,7 @@ Throughout this document, "the Playground" is the system under specification.
 3. WHERE existing SYN skills or conventions apply to a stage of this workflow THEN the Playground SHALL reuse them where possible rather than reimplementing equivalent capability.
 4. THE Playground SHALL NOT assume that the existing SYN documentation-generation skill already produces functional policy code; functional code generation is a distinct capability subject to feasibility validation. `[Feasibility: Design]`
 
-- **Priority**: High (structural end-to-end journey; the demonstrative path for the hackathon, with technical feasibility validated in Design)
+- **Priority**: Medium — demonstrative tail (stretch). The MVP delivers a labeled, non-submitted change artifact; criterion 1 against the real SYN repository is delivered only if OQ-9 confirms access.
 - **Dependencies**: Requirement 10. Open Question OQ-9 (which SYN skills/repos are reachable). `[Feasibility: Design]`
 
 ### Requirement 12: Pull request creation for human review
@@ -250,7 +252,7 @@ Throughout this document, "the Playground" is the system under specification.
 3. IF the pull request cannot be created THEN the Playground SHALL report the failure to the specialist and SHALL NOT indicate that a change was delivered.
 4. WHERE a pull request is opened THEN the Playground SHALL make its link to the originating scenario, evidence, and human selection traceable.
 
-- **Priority**: High (structural end-to-end journey; the demonstrative path for the hackathon, with technical feasibility validated in Design)
+- **Priority**: Medium — demonstrative tail (stretch). The MVP presents the pull-request intent and its traceable package without opening a real PR; criterion 1 is delivered only if OQ-9 confirms repository access.
 - **Dependencies**: Requirement 11. `[Feasibility: Design]` for repository access and PR mechanics.
 
 ### Requirement 13: Domain-context freshness
@@ -316,7 +318,9 @@ These are stated as observable expectations. Concrete thresholds are open questi
 
 ### Primary objective — lead-time reduction
 
-1. THE Playground SHALL serve the central objective of reducing the end-to-end lead time for delivering a credit policy change, by letting a specialist move from policy intent to trustworthy evidence (and toward a reviewed change) without the technical-translation handoffs required today. No numeric target is asserted here; how lead-time reduction would be measured is Open Question OQ-13.
+1. THE Playground SHALL serve the central objective of reducing the end-to-end lead time for delivering a credit policy change, by letting a specialist move from policy intent to trustworthy evidence (and toward a reviewed change) without the technical-translation handoffs required today. No numeric target is asserted here; how end-to-end lead-time reduction would be measured is Open Question OQ-13.
+2. WHEN a hypothesis is submitted and later reaches its first deterministic result THEN the Playground SHALL record both timestamps, so that the in-app hypothesis-to-evidence time can be reported. This in-app measure is an instrumented proxy for the lead-time objective, not the end-to-end business metric.
+3. WHEN a specialist records a relevance assessment on a finding (Requirement 8.4) THEN the Playground SHALL make the share of findings marked relevant reportable per session.
 
 ### Usability
 
@@ -381,7 +385,8 @@ Each item is a decision not yet made. Where a requirement depends on one, the re
 - **OQ-10**: What audit depth is required for the MVP — recorded in-app history, or additionally exportable records? (Affects R14. An immutable-audit platform is explicitly not required unless a need is demonstrated.)
 - **OQ-11**: Does access control reuse an existing identity/role mechanism or model a simplified role set for the demo? (Affects R15. A full enterprise identity platform is explicitly out of scope. `[Feasibility: Design]`.)
 - **OQ-12**: Is there an interactive latency target for an investigation run, or is it out of scope for the MVP? (Affects NFR performance.)
-- **OQ-13**: How would end-to-end lead-time reduction (the central objective) be measured for the MVP, and should any Working Backwards success metric become an acceptance criterion? If so, how is each measured? (Affects Primary-objective NFR; no numeric target is invented here.)
+- **OQ-13**: How would end-to-end lead-time reduction (the central objective) be measured for the MVP, and should any Working Backwards success metric become an acceptance criterion? If so, how is each measured? (Affects Primary-objective NFR; no numeric target is invented here.) _Partially addressed in 1.1:_ the in-app hypothesis-to-evidence time and the relevant-finding share are instrumented (Primary objective NFR 2–3); the end-to-end business baseline and targets remain open.
+- **OQ-18**: How do the stages of a real Policy Spec map to the four SYN areas (Extraction, ETL, Hard filters, Final base) required by R1.2? The synthetic fixture uses different stage names (Extração, Elegibilidade, Oferta, Consolidação) and declares a provisional mapping in `stages[].syn_area`; the real mapping must be confirmed against the real contract. (Affects R1.2, R16.)
 
 ## Requirements Needing Feasibility Validation in Design
 
@@ -397,29 +402,29 @@ The following are flagged `[Feasibility: Design]` above and must be validated te
 
 ## Glossary
 
-| Term | Definition |
-|------|------------|
-| **SYN** | The existing internal credit-policy environment and knowledge base containing policy definitions, studies, and domain knowledge; the environment this feature makes more accessible. |
-| **DM-outside-DM ("DM fora do DM")** | A separate initiative holding decision logic extracted from FICO Decision Manager to run outside the FICO DM runtime. Distinct from SYN; not assumed to be the Playground's data source. |
-| **Policy** | A credit policy in SYN, organized across four areas: Extraction, ETL, Hard filters, Final base. |
-| **`Motivo de Decisão`** | The existing dataset of historical production credit decisions used as the data basis for analyses. |
-| **Study** | An existing deterministic SYN computation that produces impact results; the source of truth for impact. |
-| **Impact analysis** | The deterministic capability of executing the relevant policy chain for a scenario and comparing the produced final base against `Motivo de Decisão`. In the MVP this is a generic, reusable capability; the current `analise de impacto de estudos` file is its functional reference, not its required implementation. |
-| **`analise de impacto de estudos`** | The existing, specific SYN file (with coupled logic) that compares a produced final base against `Motivo de Decisão`. Used as a functional reference for the impact-analysis behavior, not as a mandated integration or architecture. |
-| **Policy DAG** | The dependency graph of policy logic across the four SYN areas (Extraction, ETL, Hard filters, Final base); experimental execution must respect its valid dependency order. |
-| **Policy Spec (JSON)** | A previously consolidated, structured JSON artifact that represents a policy and gathers its relevant variables, rules, and relationships across the four SYN areas. For the MVP it is supplied upstream; the Playground consumes and validates it but does not generate it. Its concrete schema is deferred to Design. |
-| **Hypothesis** | A proposed, testable policy change expressed by the specialist or structured by the AI; a proposal, not evidence. |
-| **Scenario** | A confirmed experimental configuration (a hypothesis applied to a policy) that can be evaluated by studies. |
-| **Finding** | An AI-surfaced observation or proposed investigation; evidence-backed when supported by a study result, otherwise unproven. |
-| **Evidence-backed** | A conclusion supported by a traceable deterministic study result. |
-| **Unproven hypothesis** | A claim lacking sufficient study evidence; must not be presented as fact. |
-| **The Playground** | The system under specification in this document. |
+| Term                                | Definition                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SYN**                             | The existing internal credit-policy environment and knowledge base containing policy definitions, studies, and domain knowledge; the environment this feature makes more accessible.                                                                                                                                    |
+| **DM-outside-DM ("DM fora do DM")** | A separate initiative holding decision logic extracted from FICO Decision Manager to run outside the FICO DM runtime. Distinct from SYN; not assumed to be the Playground's data source.                                                                                                                                |
+| **Policy**                          | A credit policy in SYN, organized across four areas: Extraction, ETL, Hard filters, Final base.                                                                                                                                                                                                                         |
+| **`Motivo de Decisão`**             | The existing dataset of historical production credit decisions used as the data basis for analyses.                                                                                                                                                                                                                     |
+| **Study**                           | An existing deterministic SYN computation that produces impact results; the source of truth for impact.                                                                                                                                                                                                                 |
+| **Impact analysis**                 | The deterministic capability of executing the relevant policy chain for a scenario and comparing the produced final base against `Motivo de Decisão`. In the MVP this is a generic, reusable capability; the current `analise de impacto de estudos` file is its functional reference, not its required implementation. |
+| **`analise de impacto de estudos`** | The existing, specific SYN file (with coupled logic) that compares a produced final base against `Motivo de Decisão`. Used as a functional reference for the impact-analysis behavior, not as a mandated integration or architecture.                                                                                   |
+| **Policy DAG**                      | The dependency graph of policy logic across the four SYN areas (Extraction, ETL, Hard filters, Final base); experimental execution must respect its valid dependency order.                                                                                                                                             |
+| **Policy Spec (JSON)**              | A previously consolidated, structured JSON artifact that represents a policy and gathers its relevant variables, rules, and relationships across the four SYN areas. For the MVP it is supplied upstream; the Playground consumes and validates it but does not generate it. Its concrete schema is deferred to Design. |
+| **Hypothesis**                      | A proposed, testable policy change expressed by the specialist or structured by the AI; a proposal, not evidence.                                                                                                                                                                                                       |
+| **Scenario**                        | A confirmed experimental configuration (a hypothesis applied to a policy) that can be evaluated by studies.                                                                                                                                                                                                             |
+| **Finding**                         | An AI-surfaced observation or proposed investigation; evidence-backed when supported by a study result, otherwise unproven.                                                                                                                                                                                             |
+| **Evidence-backed**                 | A conclusion supported by a traceable deterministic study result.                                                                                                                                                                                                                                                       |
+| **Unproven hypothesis**             | A claim lacking sufficient study evidence; must not be presented as fact.                                                                                                                                                                                                                                               |
+| **The Playground**                  | The system under specification in this document.                                                                                                                                                                                                                                                                        |
 
 ## Approval Gate
 
 This document is the Requirements phase deliverable. Per the Kiro Specs workflow, Design will not begin until this is explicitly approved. The summary and the decision request are provided in the chat response, not in this file.
 
-**Status: Requirements 1.0 APPROVED** with all 16 requirements.
+**Status: Requirements 1.0 APPROVED** with all 16 requirements. **Revision 1.1 pending approval** (see _Revision History_).
 
 ### Design-phase investigation directives (approved scope for Design)
 
@@ -432,3 +437,14 @@ Design must investigate and resolve the following before any `tasks.md` or imple
 5. **Demonstrative end-to-end feasibility** — Validate the feasibility of the full demonstrative journey, including functional code generation, tests, and a real pull request, without assuming it is already solved (R11, R12, OQ-9).
 
 The design must preserve the separation between functional requirements and implementation decisions, and must not treat integrated execution, reverse dependency discovery, or code/PR generation as technically proven until validated.
+
+## Revision History
+
+| Version | Change                                                                                                           | Reason                                                                                                                                    |
+| ------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0     | Initial approved requirements (R1–R16 + NFRs).                                                                   | —                                                                                                                                         |
+| 1.1     | R11 and R12 reclassified from High to Medium as a demonstrative, gated tail; MVP scope line updated accordingly. | Requirements, Design (§9.2, §14.1), Tasks (C2/C3) and the Working Backwards document disagreed on whether code/PR generation is MVP core. |
+| 1.1     | R8 criteria 5–6 added: deterministic candidate findings beyond the changed path, and feedback-aware ranking.     | Discovery previously relied only on the model; the Working Backwards FAQ promises that relevance feedback prioritizes later suggestions.  |
+| 1.1     | Primary-objective NFR 2–3 added: instrumented in-app hypothesis-to-evidence time and relevant-finding share.     | Gives the lead-time objective a measurable proxy without inventing a business target (OQ-13 stays open for the end-to-end metric).        |
+| 1.1     | OQ-18 added: mapping of Policy Spec stages to the four SYN areas.                                                | The fixture stage names differ from the four areas named in R1.2.                                                                         |
+| 1.1     | Status header corrected.                                                                                         | The 1.0 header said no tasks.md would exist before Design approval, while tasks.md already exists.                                        |
