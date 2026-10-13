@@ -3,8 +3,9 @@
 ## Document Information
 
 - **Feature Name**: Policy Playground
-- **Version**: 1.1 (revision under review; 1.0 approved)
-- **Status**: Requirements 1.0 approved. Design 1.0 and Tasks draft exist. Revision 1.1 (see *Revision History*) awaits approval; no implementation has started.
+- **Version**: 1.2 (revision under review; 1.0 approved)
+- **Status**: Requirements 1.0 approved. Revisions 1.1 and 1.2 (see *Revision History*) await approval; no implementation has started.
+- **Team decisions incorporated**: answers recorded in the team's inception questionnaires (requirements verification and application design), listed in *Decision Log*.
 - **Approval**: Requirements 1.0 approved with all 16 requirements
 - **Context source**: AWS Builders League hackathon; SYN credit-policy environment
 
@@ -223,6 +224,8 @@ Throughout this document, "the Playground" is the system under specification.
 2. WHEN a specialist decides a change is promising THEN the Playground SHALL allow the specialist to select that scenario for the code-generation step.
 3. THE Playground SHALL NOT advance a change toward code generation unless a specialist has explicitly selected it.
 4. THE Playground SHALL NOT interpret acceptance of a finding as approval to change production policy.
+5. WHEN a specialist records a decision on a hypothesis THEN the Playground SHALL accept one of the outcomes Accept, Reject or Defer, together with a written rationale, the specialist's identity, the timestamp, and references to the evidence considered.
+6. THE Playground SHALL treat a recorded decision as immutable; IF the specialist changes their mind THEN the Playground SHALL record a new decision that references the one it supersedes, and SHALL keep both.
 
 - **Priority**: High
 - **Dependencies**: Requirements 6, 7.
@@ -277,10 +280,13 @@ Throughout this document, "the Playground" is the system under specification.
 1. WHEN an investigation progresses THEN the Playground SHALL record the hypothesis, the studies used, the supporting data context, the findings, and the human decisions associated with it.
 2. WHEN a finding is presented THEN the Playground SHALL make its originating hypothesis and study traceable.
 3. WHERE a change is advanced to code generation or a pull request THEN the Playground SHALL make the trace from that change back to its evidence and human selection available.
+4. THE Playground SHALL persist the investigation history beyond the browser session, so that a specialist can resume an investigation and an approver can review it later.
+5. WHEN any investigation event occurs (hypothesis, confirmation, execution, finding, assessment, decision) THEN the Playground SHALL also write it to an append-only audit store that the application never updates or deletes.
+6. WHEN an investigation is reopened THEN the Playground SHALL be able to reproduce each recorded deterministic result from its recorded inputs: policy version (source commit), parameter overrides, dataset version and runner version.
 
 - **Priority**: High
-- **Scope note**: The MVP requires a recorded, traceable investigation history. It does not require building an immutable-audit platform unless a demonstrated need arises.
-- **Dependencies**: Requirements 7, 10, 12. Open Question OQ-10 (audit depth for the MVP: recorded in-app history vs. exportable records).
+- **Scope note**: Criteria 4–6 follow the team decisions to persist session state and to keep an append-only audit data lake (Decision Log D-Q8, D-Q9). Storage-level immutability (write-once enforcement) remains optional and is decided in Design.
+- **Dependencies**: Requirements 7, 10, 12. Open Question OQ-10 (resolved in 1.2 — see Decision Log).
 
 ### Requirement 15: Governed data access and privacy
 
@@ -290,10 +296,13 @@ Throughout this document, "the Playground" is the system under specification.
 
 1. WHERE the Playground accesses `Motivo de Decisão` or other credit data THEN it SHALL use only governed data access rather than ungoverned copies.
 2. WHEN the Playground interacts with an AI model THEN it SHALL minimize exposure of personal data in those interactions.
-3. IF a specialist is not permitted to access a given policy or dataset THEN the Playground SHALL NOT expose that policy or dataset to them. `[Feasibility: Design]` and Open Question OQ-11 (whether access control reuses an existing identity/role mechanism or a simplified demo role set).
+3. IF a specialist is not permitted to access a given policy or dataset THEN the Playground SHALL NOT expose that policy or dataset to them.
+4. THE Playground SHALL authenticate users through federation with the corporate identity provider (Azure AD / Active Directory), and SHALL deny unauthenticated access. For the hackathon demonstration, a simplified role set in the same identity service is acceptable, provided the federation path is preserved.
+5. THE Playground SHALL run experiments only on anonymized or synthetic data derived from real data, kept in an environment isolated from production data.
+6. THE Playground SHALL enforce at least the roles Policy Specialist, Risk Approver, Data Analyst and Viewer, each with a defined permission set checked at the API.
 
 - **Priority**: High
-- **Scope note**: Governed access and privacy are required, but the MVP does not require building a full enterprise identity platform; reuse of existing governance is preferred and the demo may use a simplified role set.
+- **Scope note**: Criteria 4–6 follow the team decisions on corporate login and on anonymized/synthetic data (Decision Log D-Q5, D-Q6). The MVP does not build an identity platform; it federates with the existing one.
 - **Dependencies**: Known concern — LGPD / governed data.
 
 ### Requirement 16: Consuming and validating a consolidated Policy Spec
@@ -328,15 +337,26 @@ These are stated as observable expectations. Concrete thresholds are open questi
 
 ### Performance / responsiveness
 
-1. WHEN a specialist runs an investigation THEN the Playground SHALL keep the specialist informed of progress while studies execute. (A specific latency target is Open Question OQ-12 and is not asserted as a requirement.)
+1. WHEN a specialist runs an investigation THEN the Playground SHALL keep the specialist informed of progress while studies execute, by exposing an execution status the interface polls (Decision Log D-DQ4).
+2. WHEN a specialist submits a hypothesis THEN the Playground SHALL return the structured hypothesis, or a clarification request, within 30 seconds at the 95th percentile (resolves OQ-12 for hypothesis structuring; study execution time depends on the study and has no target in the MVP).
+
+### Scalability
+
+1. THE Playground SHALL support 10 to 50 concurrent specialists (Decision Log D-DQ3) without changes to application code.
+2. THE Playground SHALL keep no session state in application memory, so that the backend can scale horizontally by adding instances.
+3. WHILE a deterministic execution runs THEN the Playground SHALL keep it isolated from request handling, so that a long execution does not degrade other users' sessions.
 
 ### Cost control (FinOps)
 
-1. WHILE a session is active THEN the Playground SHALL control the volume of AI investigations so that inference cost per hypothesis is bounded. (Whether the bound is a concrete number is Open Question OQ-7.)
+1. WHILE a session is active THEN the Playground SHALL control the volume of AI investigations so that inference cost per hypothesis is bounded.
+2. THE Playground SHALL apply configurable per-session limits with defaults of 10 findings shown and a bounded number of model calls; findings beyond the limit SHALL remain available on request (resolves OQ-7).
+3. WHEN a deterministic execution is requested with exactly the same inputs as a previous successful one (policy version, overrides, dataset version, runner version) THEN the Playground SHALL reuse the recorded result instead of executing again.
 
 ### Reliability / integrity
 
 1. IF any study, data source, or external capability is unavailable THEN the Playground SHALL communicate the limitation and SHALL NOT fabricate a result to fill the gap (reinforces Requirements 5, 7).
+2. IF the AI model is unavailable THEN the Playground SHALL keep policy exploration, visual editing, deterministic execution and decision recording available, and SHALL state that natural-language input and AI suggestions are temporarily unavailable.
+3. WHEN a request that changes state is retried with the same idempotency key THEN the Playground SHALL NOT create a duplicate hypothesis, execution or decision.
 
 ### Security / governance
 
@@ -379,14 +399,34 @@ Each item is a decision not yet made. Where a requirement depends on one, the re
 - **OQ-14**: How are the required dependencies (rules, variables, stages) of a desired analysis discovered from the objective, and how is the policy DAG executed in valid dependency order? What can be reused from the current `analise de impacto de estudos` file as a functional reference without inheriting its coupled logic? (Affects R5, R6. `[Feasibility: Design]`.)
 - **OQ-5**: What is the depth and generality of visual editing for the MVP — which policy parameters are visually editable versus handled through natural language? (Affects R2.)
 - **OQ-6**: What exactly qualifies a finding as evidence-backed vs. unproven; are there partial-evidence states? (Affects R7.)
-- **OQ-7**: For cost control, is a simple bound on AI investigations per session sufficient for the MVP, and what is that bound? (Affects NFR cost control. R8 already requires only a bounded, human-reviewed suggestion set, so no complex configurable limit is required.)
+- **OQ-7** *(resolved in 1.2)*: For cost control, is a simple bound on AI investigations per session sufficient for the MVP, and what is that bound? → Yes: configurable per-session limits, default 10 findings shown (NFR FinOps 2).
 - **OQ-8**: When a finding becomes a scenario, does study execution start automatically or on explicit specialist action? (Affects R9.)
 - **OQ-9**: Which SYN skills and repositories are reachable for structuring, code generation, and PR creation during the hackathon? (Affects R11, R12. `[Feasibility: Design]`.)
-- **OQ-10**: What audit depth is required for the MVP — recorded in-app history, or additionally exportable records? (Affects R14. An immutable-audit platform is explicitly not required unless a need is demonstrated.)
-- **OQ-11**: Does access control reuse an existing identity/role mechanism or model a simplified role set for the demo? (Affects R15. A full enterprise identity platform is explicitly out of scope. `[Feasibility: Design]`.)
-- **OQ-12**: Is there an interactive latency target for an investigation run, or is it out of scope for the MVP? (Affects NFR performance.)
+- **OQ-10** *(resolved in 1.2)*: What audit depth is required for the MVP? → Persisted history plus an append-only audit data lake (R14.4–14.6; Decision Log D-Q9). Write-once storage enforcement is a Design option.
+- **OQ-11** *(resolved in 1.2)*: Does access control reuse an existing identity mechanism? → Yes: federation with the corporate Azure AD; simplified roles allowed for the demo (R15.4, R15.6; Decision Log D-Q5).
+- **OQ-12** *(resolved in 1.2 for hypothesis structuring)*: Is there an interactive latency target? → 30 s at P95 for hypothesis structuring (NFR performance 2); no target for study execution in the MVP.
 - **OQ-13**: How would end-to-end lead-time reduction (the central objective) be measured for the MVP, and should any Working Backwards success metric become an acceptance criterion? If so, how is each measured? (Affects Primary-objective NFR; no numeric target is invented here.) *Partially addressed in 1.1:* the in-app hypothesis-to-evidence time and the relevant-finding share are instrumented (Primary objective NFR 2–3); the end-to-end business baseline and targets remain open.
-- **OQ-18**: How do the stages of a real Policy Spec map to the four SYN areas (Extraction, ETL, Hard filters, Final base) required by R1.2? The synthetic fixture uses different stage names (Extração, Elegibilidade, Oferta, Consolidação) and declares a provisional mapping in `stages[].syn_area`; the real mapping must be confirmed against the real contract. (Affects R1.2, R16.)
+- **OQ-18**: How do the stages of a real Policy Spec map to the four SYN areas (Extraction, ETL, Hard filters, Final base) required by R1.2? The synthetic fixture uses different stage names (Extração, Elegibilidade, Oferta, Consolidação) and declares a provisional mapping in a complementary extensions file (`stage_syn_area`), leaving the Policy Spec unchanged; the real mapping must be confirmed against the real contract. (Affects R1.2, R16.)
+
+## Decision Log
+
+Decisions already made by the team in the inception questionnaires and incorporated in this version. Each entry names the question it answers, so the change can be traced to its origin.
+
+| ID | Question (inception) | Team answer | Where it lands |
+|----|----------------------|-------------|----------------|
+| D-Q1 | How are the current studies accessed? | SQL/Python jobs executed on demand | R5; Design §9.4 (asynchronous execution) |
+| D-Q2 | How are credit policies represented? | Versioned in Git | R14.6, R16; `policy.source_commit` is the Git commit, with provenance in the extensions file |
+| D-Q3 | Which model? | Recommendation requested | Design D-9: Amazon Bedrock |
+| D-Q4 | How do specialists access the Playground? | A friendly interface | R2; web interface |
+| D-Q5 | Authentication model | Corporate login (Active Directory / Azure AD via federation) | R15.4, R15.6 (resolves OQ-11) |
+| D-Q6 | Personal data in experiments | Anonymized/synthetic data derived from real data | R15.5 |
+| D-Q7 | Backend deployment strategy | Containers on Amazon ECS (Fargate) | Design D-9, §16 |
+| D-Q8 | Persistence of results and findings | DynamoDB for session state; Athena to query results | R14.4; Design §16 (resolves OQ-16) |
+| D-Q9 | Audit storage | S3 as append-only audit data lake (Parquet/JSON) | R14.5 (resolves OQ-10) |
+| D-DQ3 | Expected concurrency | 10–50 concurrent users | NFR Scalability 1 |
+| D-DQ4 | How results reach the user | Polling of an execution status | NFR Performance 1 |
+
+Answers that were **not** adopted, with the reason, are recorded in Design §17.
 
 ## Requirements Needing Feasibility Validation in Design
 
@@ -398,7 +438,7 @@ The following are flagged `[Feasibility: Design]` above and must be validated te
 - Reuse of existing SYN skills, and whether functional policy-code generation (distinct from the existing documentation-generation skill) is achievable within SYN conventions (R11).
 - Repository access and pull-request creation mechanics (R12).
 - Detecting domain-context staleness, and whether straightforward regeneration exists for the MVP (R13).
-- Governed data access and reuse of existing governance/identity, without building a full identity platform (R15).
+- Governed data access and federation with the existing corporate identity, without building a full identity platform (R15).
 
 ## Glossary
 
@@ -424,7 +464,7 @@ The following are flagged `[Feasibility: Design]` above and must be validated te
 
 This document is the Requirements phase deliverable. Per the Kiro Specs workflow, Design will not begin until this is explicitly approved. The summary and the decision request are provided in the chat response, not in this file.
 
-**Status: Requirements 1.0 APPROVED** with all 16 requirements. **Revision 1.1 pending approval** (see *Revision History*).
+**Status: Requirements 1.0 APPROVED** with all 16 requirements. **Revisions 1.1 and 1.2 pending approval** (see *Revision History*).
 
 ### Design-phase investigation directives (approved scope for Design)
 
@@ -448,3 +488,9 @@ The design must preserve the separation between functional requirements and impl
 | 1.1 | Primary-objective NFR 2–3 added: instrumented in-app hypothesis-to-evidence time and relevant-finding share. | Gives the lead-time objective a measurable proxy without inventing a business target (OQ-13 stays open for the end-to-end metric). |
 | 1.1 | OQ-18 added: mapping of Policy Spec stages to the four SYN areas. | The fixture stage names differ from the four areas named in R1.2. |
 | 1.1 | Status header corrected. | The 1.0 header said no tasks.md would exist before Design approval, while tasks.md already exists. |
+| 1.2 | Decision Log added with the team's inception answers; OQ-7, OQ-10, OQ-11 and OQ-12 resolved. | The team had already answered these questions; the spec now records the answers and their origin. |
+| 1.2 | R10.5–10.6: decision outcomes Accept / Reject / Defer, with rationale; decisions are immutable and superseded, never edited. | Integrity of the decision trail; "Defer" reflects how approvals actually happen. |
+| 1.2 | R14.4–14.6: persisted history, append-only audit store, reproducibility from recorded inputs. | Team decisions D-Q8 and D-Q9; a decision must be re-checkable later. |
+| 1.2 | R15.4–15.6: corporate identity federation, anonymized/synthetic data in an isolated environment, minimum role set. | Team decisions D-Q5 and D-Q6. |
+| 1.2 | NFR additions: 30 s P95 for hypothesis structuring, Scalability section (10–50 users, stateless backend, isolated execution), FinOps defaults and result reuse, reliability under model outage and idempotent retries. | Robustness and scale requirements were implicit; they are now testable. |
+| 1.2 | OQ-18 wording: the provisional SYN-area mapping lives in a complementary extensions file, not inside the Policy Spec. | R16.3: the Playground consumes the Policy Spec and must not alter it. |

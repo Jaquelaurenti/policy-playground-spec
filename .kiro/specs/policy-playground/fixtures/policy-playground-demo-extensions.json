@@ -1,0 +1,49 @@
+{
+  "extends": {
+    "file": "policy-playground-demo-policy.json",
+    "policy_id": "microcredito-demo",
+    "source_commit": "synthetic-demo-v1"
+  },
+  "extension_version": "1.2",
+  "description": "Metadados do Policy Playground que complementam o Policy Spec sem alterá-lo. O Policy Spec é produzido por outra etapa e o Playground não o modifica (R16.3); tudo o que é próprio do Playground fica neste arquivo, referenciado pelos ids do Policy Spec. Conteúdo 100% fictício.",
+  "policy_source": {
+    "vcs": "git",
+    "repository": "synthetic/policy-playground-demo",
+    "path": "policies/microcredito-demo",
+    "commit": "synthetic-demo-v1",
+    "note": "Em uma política real, commit é o Git commit da política no SYN (decisão do time D-Q2) e deve ser igual a source_commit do Policy Spec."
+  },
+  "stage_syn_area": {
+    "01": "Extraction",
+    "02": "Hard filters",
+    "03": "Final base",
+    "04": "Final base"
+  },
+  "parameter_domains": {
+    "P001": {
+      "editable": true,
+      "type": "number",
+      "min": 0,
+      "max": 20000,
+      "step": 100
+    },
+    "P002": {
+      "editable": true,
+      "type": "number",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
+  },
+  "datasets": [
+    {
+      "dataset_version": "synthetic-demo-2026-10-13",
+      "kind": "synthetic",
+      "contains_pii": false,
+      "file": "policy-playground-demo-dataset.json",
+      "record_count": 12,
+      "payload_table": "demo_payload",
+      "description": "Conjunto fictício usado pelo SimulatedRunner; a dataset_version entra na chave de idempotência das execuções (design §9.4, decisão do time D-Q6)."
+    }
+  ]
+}
