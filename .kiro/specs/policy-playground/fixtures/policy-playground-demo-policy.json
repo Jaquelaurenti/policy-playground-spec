@@ -18,8 +18,14 @@
           "id": "0101",
           "file": "01_extracao.sql",
           "output_table": "demo_stage_01",
-          "input_tables": ["demo_payload"],
-          "rule_ids": ["R001", "R002", "R003"]
+          "input_tables": [
+            "demo_payload"
+          ],
+          "rule_ids": [
+            "R001",
+            "R002",
+            "R003"
+          ]
         }
       ]
     },
@@ -32,8 +38,14 @@
           "id": "0201",
           "file": "02_elegibilidade.sql",
           "output_table": "demo_stage_02",
-          "input_tables": ["demo_stage_01"],
-          "rule_ids": ["R004", "R005", "R006"]
+          "input_tables": [
+            "demo_stage_01"
+          ],
+          "rule_ids": [
+            "R004",
+            "R005",
+            "R006"
+          ]
         }
       ]
     },
@@ -46,8 +58,13 @@
           "id": "0301",
           "file": "03_oferta.sql",
           "output_table": "demo_stage_03",
-          "input_tables": ["demo_stage_02"],
-          "rule_ids": ["R007", "R008"]
+          "input_tables": [
+            "demo_stage_02"
+          ],
+          "rule_ids": [
+            "R007",
+            "R008"
+          ]
         }
       ]
     },
@@ -60,8 +77,12 @@
           "id": "0401",
           "file": "04_consolidacao.sql",
           "output_table": "demo_stage_04",
-          "input_tables": ["demo_stage_03"],
-          "rule_ids": ["R009"]
+          "input_tables": [
+            "demo_stage_03"
+          ],
+          "rule_ids": [
+            "R009"
+          ]
         }
       ]
     }
@@ -80,7 +101,9 @@
         "cast": "number"
       },
       "inputs": [],
-      "outputs": ["renda_mensal"],
+      "outputs": [
+        "renda_mensal"
+      ],
       "depends_on": [],
       "parameters": [],
       "source": {
@@ -101,7 +124,9 @@
         "cast": "number"
       },
       "inputs": [],
-      "outputs": ["idade"],
+      "outputs": [
+        "idade"
+      ],
       "depends_on": [],
       "parameters": [],
       "source": {
@@ -122,7 +147,9 @@
         "cast": "number"
       },
       "inputs": [],
-      "outputs": ["comprometimento_pct"],
+      "outputs": [
+        "comprometimento_pct"
+      ],
       "depends_on": [],
       "parameters": [],
       "source": {
@@ -147,9 +174,15 @@
         ],
         "else": "REPROVADO"
       },
-      "inputs": ["idade"],
-      "outputs": ["status_idade"],
-      "depends_on": ["R002"],
+      "inputs": [
+        "idade"
+      ],
+      "outputs": [
+        "status_idade"
+      ],
+      "depends_on": [
+        "R002"
+      ],
       "parameters": [],
       "source": {
         "file": "02_elegibilidade.sql",
@@ -176,10 +209,19 @@
         ],
         "else": "REPROVADO"
       },
-      "inputs": ["renda_mensal", "renda_minima"],
-      "outputs": ["status_renda"],
-      "depends_on": ["R001"],
-      "parameters": ["P001"],
+      "inputs": [
+        "renda_mensal",
+        "renda_minima"
+      ],
+      "outputs": [
+        "status_renda"
+      ],
+      "depends_on": [
+        "R001"
+      ],
+      "parameters": [
+        "P001"
+      ],
       "source": {
         "file": "02_elegibilidade.sql",
         "cell_index": 5
@@ -205,10 +247,19 @@
         ],
         "else": "REPROVADO"
       },
-      "inputs": ["comprometimento_pct", "comprometimento_max_pct"],
-      "outputs": ["status_comprometimento"],
-      "depends_on": ["R003"],
-      "parameters": ["P002"],
+      "inputs": [
+        "comprometimento_pct",
+        "comprometimento_max_pct"
+      ],
+      "outputs": [
+        "status_comprometimento"
+      ],
+      "depends_on": [
+        "R003"
+      ],
+      "parameters": [
+        "P002"
+      ],
       "source": {
         "file": "02_elegibilidade.sql",
         "cell_index": 6
@@ -238,9 +289,15 @@
         ],
         "else": "BASICA"
       },
-      "inputs": ["renda_mensal"],
-      "outputs": ["faixa"],
-      "depends_on": ["R001"],
+      "inputs": [
+        "renda_mensal"
+      ],
+      "outputs": [
+        "faixa"
+      ],
+      "depends_on": [
+        "R001"
+      ],
       "parameters": [],
       "source": {
         "file": "03_oferta.sql",
@@ -272,11 +329,21 @@
             "B": 2500
           }
         },
-        "col_labels": ["A", "B"]
+        "col_labels": [
+          "A",
+          "B"
+        ]
       },
-      "inputs": ["faixa", "perfil"],
-      "outputs": ["limite_sugerido"],
-      "depends_on": ["R007"],
+      "inputs": [
+        "faixa",
+        "perfil"
+      ],
+      "outputs": [
+        "limite_sugerido"
+      ],
+      "depends_on": [
+        "R007"
+      ],
       "parameters": [],
       "source": {
         "file": "03_oferta.sql",
@@ -306,8 +373,15 @@
         "status_comprometimento",
         "limite_sugerido"
       ],
-      "outputs": ["resultado"],
-      "depends_on": ["R004", "R005", "R006", "R008"],
+      "outputs": [
+        "resultado"
+      ],
+      "depends_on": [
+        "R004",
+        "R005",
+        "R006",
+        "R008"
+      ],
       "parameters": [],
       "source": {
         "file": "04_consolidacao.sql",
@@ -398,7 +472,9 @@
       "description": "Corte de renda editável no what-if",
       "value": 2500,
       "unit": "BRL",
-      "used_by": ["R005"]
+      "used_by": [
+        "R005"
+      ]
     },
     {
       "id": "P002",
@@ -406,7 +482,9 @@
       "description": "Limite de comprometimento",
       "value": 35,
       "unit": "%",
-      "used_by": ["R006"]
+      "used_by": [
+        "R006"
+      ]
     }
   ],
   "dag": {
@@ -415,33 +493,55 @@
         "name": "demo_stage_01",
         "stage": "01",
         "produced_by": "01",
-        "input_tables": ["demo_payload"]
+        "input_tables": [
+          "demo_payload"
+        ]
       },
       {
         "name": "demo_stage_02",
         "stage": "02",
         "produced_by": "02",
-        "input_tables": ["demo_stage_01"]
+        "input_tables": [
+          "demo_stage_01"
+        ]
       },
       {
         "name": "demo_stage_03",
         "stage": "03",
         "produced_by": "03",
-        "input_tables": ["demo_stage_02"]
+        "input_tables": [
+          "demo_stage_02"
+        ]
       },
       {
         "name": "demo_stage_04",
         "stage": "04",
         "produced_by": "04",
-        "input_tables": ["demo_stage_03"]
+        "input_tables": [
+          "demo_stage_03"
+        ]
       }
     ],
     "execution_order": [
-      ["R001", "R002", "R003"],
-      ["R004", "R005", "R006"],
-      ["R007"],
-      ["R008"],
-      ["R009"]
+      [
+        "R001",
+        "R002",
+        "R003"
+      ],
+      [
+        "R004",
+        "R005",
+        "R006"
+      ],
+      [
+        "R007"
+      ],
+      [
+        "R008"
+      ],
+      [
+        "R009"
+      ]
     ]
   },
   "motivos": [

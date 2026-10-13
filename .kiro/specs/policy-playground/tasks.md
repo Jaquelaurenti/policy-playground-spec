@@ -45,7 +45,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
     - collisions between two **predefined** definitions on that key are detected and handled with the **blocking** behavior already defined above (reported as a conflict, never silently merged);
     - predefined-vs-auto-extracted collisions keep the predefined definition as a recorded merge;
     - every merge and every conflict stays **traceable** in the `ValidationReport`, naming both source definitions and the resolution.
-      This provisional strategy **must not be presented or reused as the definitive rule for the real Policy Spec schema**, and no scope-derivation rule is to be invented. See the OQ-17 note at the end of this document.
+    This provisional strategy **must not be presented or reused as the definitive rule for the real Policy Spec schema**, and no scope-derivation rule is to be invented. See the OQ-17 note at the end of this document.
   - Unit tests (against the real fixture): fixture loads; `consumed_by` for `renda_mensal` resolves to a set **derived from the fixture** (inverting `inputs`), expected {R005, R007} and asserted to match the loaded model, not hardcoded independently; a predefined-vs-auto-extracted collision keeps the predefined definition and records the merge; a predefined-vs-predefined `name` collision is reported as a conflict (blocking) rather than merged; the recorded merge/conflict entry names both sources
   - _Requirements: R16.1, R16.3, R1.1; design §6.1, §6.2; open: OQ-17 (parameter `scope` source for the dedup key)_
 
@@ -164,7 +164,7 @@ Tasks that depend on real SYN access or on an open question are marked **[CONDIT
   - _Requirements: R8.1, R8.5, R5.10; design §10.3, D-10_
 
 - [ ] 12.2 Implement feedback-aware ranking
-  - Score = `w_struct · [deterministic_analysis] + w_fb · (relevant + 1) / (assessed + 2)` per (policy, kind), weights in configuration; apply the cap _N_ (task 12) after ranking, over deterministic and model suggestions together
+  - Score = `w_struct · [deterministic_analysis] + w_fb · (relevant + 1) / (assessed + 2)` per (policy, kind), weights in configuration; apply the cap *N* (task 12) after ranking, over deterministic and model suggestions together
   - Unit tests: with no assessments the feedback term is 0.5 for every kind; recorded assessments change the order as expected; the cap is applied after ranking
   - _Requirements: R8.2, R8.4, R8.6; design §10.2, §10.3_
 
@@ -285,29 +285,29 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 
 ## Requirements coverage check (every requirement maps to a task)
 
-| Requirement                             | Task(s)                                                   |
-| --------------------------------------- | --------------------------------------------------------- |
-| R1 Policy exploration                   | 2, 3, 3.1 (`syn_area` warning), 14                        |
-| R2 Two entry points / hybrid            | 15                                                        |
-| R3 Hypothesis structuring               | 10                                                        |
-| R4 Human confirmation                   | 5, 11                                                     |
-| R5 Deterministic impact (SIMULADO core) | 4, 5, 6, 7, 7.1 (+ C1 for real)                           |
-| R6 Baseline vs scenario                 | 8                                                         |
-| R7 Evidence / proven-unproven           | 9.2, 12, 16                                               |
-| R8 AI discovery (bounded)               | 12, 12.1, 12.2                                            |
-| R9 Finding → scenario                   | 13                                                        |
-| R10 Human decision                      | 9.2, 16                                                   |
-| R11 Code+tests                          | C2                                                        |
-| R12 Pull request                        | C3                                                        |
-| R13 Domain-context freshness            | 19 (+ C5)                                                 |
-| R14 Traceability/audit                  | 9.1 (+ C4 for persistence/export)                         |
-| R15 Governed data / privacy             | 17, 21, 22                                                |
-| R16 Consume+validate Policy Spec        | 2, 3 (+ C5 real schema)                                   |
-| NFR lead-time                           | 19.1, 20, 23 (in-app proxy); end-to-end measurement OQ-13 |
-| NFR usability (no code)                 | 10, 15                                                    |
-| NFR performance (progress)              | 19                                                        |
-| NFR FinOps                              | 12, 18, 19.1, 21, 23                                      |
-| NFR reliability/integrity               | 7, 18                                                     |
+| Requirement | Task(s) |
+|-------------|---------|
+| R1 Policy exploration | 2, 3, 3.1 (`syn_area` warning), 14 |
+| R2 Two entry points / hybrid | 15 |
+| R3 Hypothesis structuring | 10 |
+| R4 Human confirmation | 5, 11 |
+| R5 Deterministic impact (SIMULADO core) | 4, 5, 6, 7, 7.1 (+ C1 for real) |
+| R6 Baseline vs scenario | 8 |
+| R7 Evidence / proven-unproven | 9.2, 12, 16 |
+| R8 AI discovery (bounded) | 12, 12.1, 12.2 |
+| R9 Finding → scenario | 13 |
+| R10 Human decision | 9.2, 16 |
+| R11 Code+tests | C2 |
+| R12 Pull request | C3 |
+| R13 Domain-context freshness | 19 (+ C5) |
+| R14 Traceability/audit | 9.1 (+ C4 for persistence/export) |
+| R15 Governed data / privacy | 17, 21, 22 |
+| R16 Consume+validate Policy Spec | 2, 3 (+ C5 real schema) |
+| NFR lead-time | 19.1, 20, 23 (in-app proxy); end-to-end measurement OQ-13 |
+| NFR usability (no code) | 10, 15 |
+| NFR performance (progress) | 19 |
+| NFR FinOps | 12, 18, 19.1, 21, 23 |
+| NFR reliability/integrity | 7, 18 |
 
 Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional and carry their gating OQ/risk; nothing architecturally foreseen but un-gated is presented as MVP-core work.
 
@@ -320,7 +320,7 @@ Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional 
   - the fixture's missing `scope` **must not be "fixed" silently**, and the fixture's absence of `scope` **must not be used to infer** how the real system behaves (the provisional `name`-only key is a demo fallback, not a model of production);
   - the provisional strategy is explicitly **not** the definitive rule for the real schema;
   - adapting to the real schema remains gated by the already-registered questions, **especially OQ-2 (real Policy Spec owner/availability/freshness) and OQ-15 (minimal real structure/validation)**, and is carried out under conditional task **C5**.
-    This is a documentation/decision gap, **not a blocker** for starting the MVP-core tasks on the synthetic fixture, because the provisional behavior is explicitly delimited above.
+  This is a documentation/decision gap, **not a blocker** for starting the MVP-core tasks on the synthetic fixture, because the provisional behavior is explicitly delimited above.
 
 ## Approval Gate
 
@@ -328,10 +328,10 @@ This is the Tasks phase deliverable. Per the Kiro Specs workflow, implementation
 
 ## Revision History
 
-| Version | Change                                                                                                                  | Reason                                                  |
-| ------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| 0.1     | Initial tasks drafted from Design 1.0.                                                                                  | —                                                       |
-| 1.1     | Tasks 12.1 (generators G1/G2) and 12.2 (feedback-aware ranking).                                                        | Requirements 1.1 R8.5–8.6; design §10.3.                |
-| 1.1     | Task 19.1 (product metrics and token usage).                                                                            | Requirements 1.1 Primary-objective NFR 2–3; design §12. |
-| 1.1     | Phase 9, tasks 21–23 (CDK stack, Bedrock + Guardrails, CloudWatch).                                                     | Design 1.1 §16.                                         |
-| 1.1     | Task 3.1 `syn_area` warning; task 14 area rendering; task 20 extended with the G2 finding; C4 names the DynamoDB store. | Design 1.1 §6.1, §10.3, §16.                            |
+| Version | Change | Reason |
+|---------|--------|--------|
+| 0.1 | Initial tasks drafted from Design 1.0. | — |
+| 1.1 | Tasks 12.1 (generators G1/G2) and 12.2 (feedback-aware ranking). | Requirements 1.1 R8.5–8.6; design §10.3. |
+| 1.1 | Task 19.1 (product metrics and token usage). | Requirements 1.1 Primary-objective NFR 2–3; design §12. |
+| 1.1 | Phase 9, tasks 21–23 (CDK stack, Bedrock + Guardrails, CloudWatch). | Design 1.1 §16. |
+| 1.1 | Task 3.1 `syn_area` warning; task 14 area rendering; task 20 extended with the G2 finding; C4 names the DynamoDB store. | Design 1.1 §6.1, §10.3, §16. |

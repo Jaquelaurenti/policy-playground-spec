@@ -32,15 +32,15 @@ Princípio central do produto:
 └── README.md
 ```
 
-Os três artefatos ficam em `.kiro/specs/policy-playground/`, que é o caminho em que o Kiro procura specs. Ao abrir o repositório no Kiro, o spec aparece no painel **Specs** e cada item de `tasks.md` pode ser iniciado pela ação _Start task_.
+Os três artefatos ficam em `.kiro/specs/policy-playground/`, que é o caminho em que o Kiro procura specs. Ao abrir o repositório no Kiro, o spec aparece no painel **Specs** e cada item de `tasks.md` pode ser iniciado pela ação *Start task*.
 
 ## Os três artefatos
 
-| #   | Documento                                                          | O que contém                                                                                                                                                                                                                                                   |
-| --- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 📋  | [requirements.md](./.kiro/specs/policy-playground/requirements.md) | Requisitos (R1–R16) + NFRs em formato EARS: o que a solução deve fazer, com critérios de aceite, premissas e questões em aberto.                                                                                                                               |
-| 🎨  | [design.md](./.kiro/specs/policy-playground/design.md)             | Desenho da solução: aplicação única com módulos internos, modelo de dados, fluxos, execução determinística, investigação por IA (incluindo geradores determinísticos de candidatos), governança, visão de implantação AWS e diagrama de visão geral (Mermaid). |
-| ✅  | [tasks.md](./.kiro/specs/policy-playground/tasks.md)               | Plano de implementação: tarefas incrementais e verificáveis, vinculadas a Requirements e Design, com as tarefas condicionais (dependentes de acesso ao SYN) separadas do núcleo do MVP.                                                                        |
+| # | Documento | O que contém |
+|---|-----------|--------------|
+| 📋 | [requirements.md](./.kiro/specs/policy-playground/requirements.md) | Requisitos (R1–R16) + NFRs em formato EARS: o que a solução deve fazer, com critérios de aceite, premissas e questões em aberto. |
+| 🎨 | [design.md](./.kiro/specs/policy-playground/design.md) | Desenho da solução: aplicação única com módulos internos, modelo de dados, fluxos, execução determinística, investigação por IA (incluindo geradores determinísticos de candidatos), governança, visão de implantação AWS e diagrama de visão geral (Mermaid). |
+| ✅ | [tasks.md](./.kiro/specs/policy-playground/tasks.md) | Plano de implementação: tarefas incrementais e verificáveis, vinculadas a Requirements e Design, com as tarefas condicionais (dependentes de acesso ao SYN) separadas do núcleo do MVP. |
 
 ## Material de apoio
 
@@ -53,11 +53,11 @@ Os três artefatos ficam em `.kiro/specs/policy-playground/`, que é o caminho e
 
 ## Status dos documentos
 
-| Documento       | Versão | Status                                          |
-| --------------- | ------ | ----------------------------------------------- |
-| requirements.md | 1.1    | 1.0 aprovado; revisão 1.1 em revisão            |
-| design.md       | 1.1    | 1.0 aprovado; revisão 1.1 em revisão            |
-| tasks.md        | 1.1    | Rascunho em revisão; implementação não iniciada |
+| Documento | Versão | Status |
+|-----------|--------|--------|
+| requirements.md | 1.1 | 1.0 aprovado; revisão 1.1 em revisão |
+| design.md | 1.1 | 1.0 aprovado; revisão 1.1 em revisão |
+| tasks.md | 1.1 | Rascunho em revisão; implementação não iniciada |
 
 O que mudou em cada revisão está na seção **Revision History** de cada documento.
 
