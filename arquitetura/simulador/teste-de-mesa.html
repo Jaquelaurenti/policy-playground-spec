@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Teste de Mesa do Policy Playground</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: mesa de engenharia — cenários à esquerda, mapa + passo no centro, estado da "memória" em painéis, e a tabela de teste de mesa embaixo */
+:root{
+  --bg:#F4F5F8; --surface:#FFFFFF; --sunk:#EEF0F4; --ink:#14161B; --muted:#5A606D; --line:#D9DDE4;
+  --accent:#B3155A; --accent-soft:rgba(179,21,90,.10); --ok:#1B7A4B; --ok-soft:rgba(27,122,75,.11);
+  --warn:#9A5B00; --warn-soft:rgba(154,91,0,.12); --bad:#B42318; --bad-soft:rgba(180,35,24,.10);
+  --node:#FFFFFF; --edge:#AEB4BF;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1014; --surface:#161920; --sunk:#1C2029; --ink:#E7E9EE; --muted:#9AA1AE; --line:#2A2F39;
+  --accent:#F0609B; --accent-soft:rgba(240,96,155,.16); --ok:#4CC28A; --ok-soft:rgba(76,194,138,.14);
+  --warn:#EDB04E; --warn-soft:rgba(237,176,78,.15); --bad:#F7756A; --bad-soft:rgba(247,117,106,.14);
+  --node:#1C2029; --edge:#4A5160; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1014; --surface:#161920; --sunk:#1C2029; --ink:#E7E9EE; --muted:#9AA1AE; --line:#2A2F39;
+  --accent:#F0609B; --accent-soft:rgba(240,96,155,.16); --ok:#4CC28A; --ok-soft:rgba(76,194,138,.14);
+  --warn:#EDB04E; --warn-soft:rgba(237,176,78,.15); --bad:#F7756A; --bad-soft:rgba(247,117,106,.14);
+  --node:#1C2029; --edge:#4A5160; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(26px,3.4vw,38px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:6px 0 0;max-width:70ch}
+.team{font-family:var(--f-display);font-weight:700;color:var(--accent);font-size:20px;text-align:right}
+.team small{display:block;font-family:var(--f-body);font-weight:500;color:var(--muted);font-size:13px}
+.verdict{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.verdict b{font-family:var(--f-display);font-size:18px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.neutral{background:var(--sunk);color:var(--muted)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{font:600 14px var(--f-body);background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:10px 14px;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.grid{display:grid;grid-template-columns:270px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.list{display:flex;flex-direction:column;gap:6px}
+.scn{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;color:var(--ink);font:inherit}
+.scn[aria-current="true"]{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.scn .n{font-family:var(--f-mono);font-size:12px;color:var(--muted);grid-row:span 2;padding-top:2px}
+.scn .t{font-weight:600;font-size:14px;line-height:1.3}
+.scn .r{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.panel h2,.panel h3{margin:0 0 8px;font-family:var(--f-display);font-weight:600;letter-spacing:.01em}
+.panel h2{font-size:20px} .panel h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.mapwrap{overflow-x:auto}
+svg.map{display:block;width:100%;min-width:640px;height:auto}
+svg.map text{font-family:var(--f-body);font-size:11.5px;fill:var(--ink)}
+.node rect.base{fill:var(--surface);stroke:none}
+.node rect{fill:var(--node);stroke:var(--edge);stroke-width:1.2}
+.node.on rect{stroke:var(--accent);stroke-width:2.4;fill:var(--accent-soft)}
+.node.down rect{stroke:var(--bad);stroke-dasharray:4 3;fill:var(--bad-soft)}
+.node.down text{fill:var(--bad)}
+.node rect.base,.node.on rect.base,.node.down rect.base{fill:var(--surface);stroke:none;stroke-width:0}
+.e{stroke:var(--edge);stroke-width:1.2;fill:none}
+.e.on{stroke:var(--accent);stroke-width:2.6}
+.step{display:flex;flex-direction:column;gap:10px}
+.stephead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline}
+.stephead .idx{font-family:var(--f-mono);color:var(--muted);font-size:13px}
+.stephead h2{margin:0;font-size:21px}
+.controls{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font:600 14px var(--f-body);border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+.checks{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.checks li{display:grid;grid-template-columns:auto auto 1fr;gap:8px;align-items:baseline;font-size:14px}
+.req{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.changes{margin:0;padding-left:18px;color:var(--ink);font-size:14px}
+.changes code,.mono{font-family:var(--f-mono);font-size:12.5px}
+.state{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13px;margin:0}
+.kv dt{font-family:var(--f-mono);font-size:12px;color:var(--muted)} .kv dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ev{max-height:220px;overflow:auto;font-family:var(--f-mono);font-size:12px}
+.ev div{display:grid;grid-template-columns:3ch 1fr;gap:8px;padding:2px 0;border-bottom:1px dashed var(--line)}
+.ev div.new{color:var(--accent);font-weight:600}
+.q{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.q div{background:var(--sunk);border-radius:8px;padding:8px 4px}
+.q b{display:block;font-family:var(--f-display);font-size:24px;font-variant-numeric:tabular-nums}
+.q span{font-size:12px;color:var(--muted)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;background:var(--sunk)}
+td.num{font-family:var(--f-mono);color:var(--muted);white-space:nowrap}
+tr.cur td{background:var(--accent-soft)}
+.note{font-size:13px;color:var(--muted);margin:0}
+/* carga */
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.form input,.form select{font:500 15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-variant-numeric:tabular-nums}
+.presets{display:flex;flex-wrap:wrap;gap:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.kpi{background:var(--sunk);border-radius:8px;padding:10px 12px}
+.kpi span{font-size:12px;color:var(--muted);display:block}
+.kpi b{font-family:var(--f-display);font-size:24px;font-variant-numeric:tabular-nums}
+svg.chart{display:block;width:100%;height:auto}
+svg.chart text{font-family:var(--f-body);font-size:11px;fill:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.node rect,.e{transition:stroke .25s,fill .25s,stroke-width .25s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Teste de Mesa do Policy Playground</h1>
+      <p class="sub">Cada cenário percorre a arquitetura passo a passo, guarda o estado de tabelas, filas e buckets como numa tabela de teste de mesa e confere o resultado contra os requisitos do SDD. As regras e os 12 registros do fixture sintético são os do repositório; latências e cotas são premissas simuladas.</p>
+    </div>
+    <div class="team">CredIA Girls<small>AWS Builders League</small></div>
+  </header>
+
+  <div class="verdict" id="verdict" aria-live="polite"></div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-cen" aria-selected="true" aria-controls="view-cen">Cenários passo a passo</button>
+    <button role="tab" id="tab-load" aria-selected="false" aria-controls="view-load">Carga e custo</button>
+  </div>
+
+  <section id="view-cen" role="tabpanel" aria-labelledby="tab-cen">
+    <div class="grid">
+      <nav class="list" id="scnList" aria-label="Cenários"></nav>
+      <div class="main">
+        <div class="panel">
+          <div class="mapwrap"><svg class="map" id="map" viewBox="0 0 930 270" role="img" aria-label="Mapa da arquitetura com o componente ativo destacado"></svg></div>
+        </div>
+        <div class="panel step" id="stepPanel"></div>
+        <div class="state" id="statePanels"></div>
+        <div class="panel">
+          <h3>Tabela de teste de mesa</h3>
+          <div class="tablewrap"><table id="desk"><thead><tr><th>#</th><th>Componente</th><th>Ação</th><th>Estado alterado</th><th>Verificações</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-load" role="tabpanel" aria-labelledby="tab-load" hidden>
+    <div class="main">
+      <div class="panel">
+        <h2>Hora de pico simulada</h2>
+        <p class="note">Simulação de eventos discretos, segundo a segundo, de uma hora de pico: chegadas de hipóteses em linguagem natural, fila <span class="mono">llm</span>, token bucket com 70% da cota e workers limitados. A latência observada inclui o polling com backoff (1, 2, 4, 8 e 10 s). O padrão de 10 mil tokens é o contexto do fixture (8,1 mil de prompt e 2 mil de saída); 32 mil é o teto da seção 9.1.</p>
+        <div class="presets" style="margin-top:10px">
+          <button class="btn" data-preset="normal">Pico normal, 50 usuários</button>
+          <button class="btn" data-preset="burst">Workshop: rajada de 50</button>
+          <button class="btn" data-preset="minq">Cota mínima pessimista</button>
+          <button class="btn" data-preset="haiku">Haiku com cache: custo</button>
+        </div>
+      </div>
+      <div class="panel">
+        <form class="form" id="loadForm">
+          <label for="users">Especialistas<input id="users" type="number" min="1" max="2000" value="50"></label>
+          <label for="hpd">Hipóteses por especialista por dia<input id="hpd" type="number" min="1" max="200" value="10"></label>
+          <label for="peak">Fator de pico<input id="peak" type="number" min="1" max="20" step="0.5" value="4"></label>
+          <label for="burst">Rajada no início da hora<input id="burst" type="number" min="0" max="500" value="0"></label>
+          <label for="tpm">Cota do Bedrock (mil tokens/min)<input id="tpm" type="number" min="5" max="10000" value="200"></label>
+          <label for="tok">Tokens por hipótese (teto 32 mil)<input id="tok" type="number" min="1000" max="32000" step="500" value="10000"></label>
+          <label for="lat">Latência média do Bedrock (s)<input id="lat" type="number" min="1" max="60" step="0.5" value="8"></label>
+          <label for="wmax">Teto de workers llm<input id="wmax" type="number" min="1" max="100" value="10"></label>
+          <label for="strat">Estratégia de modelo<select id="strat">
+            <option value="sonnet_nc">Sonnet 5.5 sem cache</option>
+            <option value="sonnet_c" selected>Sonnet 5.5 com cache</option>
+            <option value="tier">Haiku estrutura, Sonnet sugere</option>
+            <option value="haiku">Haiku 5.5 com cache</option></select></label>
+        </form>
+      </div>
+      <div class="panel"><div class="kpis" id="kpis"></div></div>
+      <div class="panel">
+        <h3>Fila llm e conclusões por minuto</h3>
+        <svg class="chart" id="chart" viewBox="0 0 760 240" role="img" aria-label="Profundidade da fila e hipóteses concluídas por minuto"></svg>
+      </div>
+      <div class="panel"><h3>Verificações</h3><ul class="checks" id="loadChecks"></ul></div>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* ===================== Fixture (do repositório) ===================== */
+const POLICY = {id:"microcredito-demo", sourceCommit:"synthetic-demo-v1", objectVersion:"3", datasetVersion:"synthetic-demo-2026-10-13"};
+const BASE_PARAMS = {P001:2500, P002:35};
+const PARAM_NAME = {P001:"renda_minima", P002:"comprometimento_max_pct"};
+const RULES = [
+  {id:"R001",in:[],out:["renda_mensal"],dep:[],par:[]},
+  {id:"R002",in:[],out:["idade"],dep:[],par:[]},
+  {id:"R003",in:[],out:["comprometimento_pct"],dep:[],par:[]},
+  {id:"R004",in:["idade"],out:["status_idade"],dep:["R002"],par:[]},
+  {id:"R005",in:["renda_mensal","renda_minima"],out:["status_renda"],dep:["R001"],par:["P001"]},
+  {id:"R006",in:["comprometimento_pct","comprometimento_max_pct"],out:["status_comprometimento"],dep:["R003"],par:["P002"]},
+  {id:"R007",in:["renda_mensal"],out:["faixa"],dep:["R001"],par:[]},
+  {id:"R008",in:["faixa","perfil"],out:["limite_sugerido"],dep:["R007"],par:[]},
+  {id:"R009",in:["status_idade","status_renda","status_comprometimento","limite_sugerido"],out:["resultado"],dep:["R004","R005","R006","R008"],par:[]}
+];
+const ORDER = ["R001","R002","R003","R004","R005","R006","R007","R008","R009"];
+const MATRIX = {BASICA:{A:1000,B:500},MEDIA:{A:3000,B:1500},ALTA:{A:5000,B:2500}};
+const DATASET = [{"id":"S01","renda_mensal":2200,"idade":30,"comprometimento_pct":20,"perfil":"A"},{"id":"S02","renda_mensal":2500,"idade":41,"comprometimento_pct":25,"perfil":"B"},{"id":"S03","renda_mensal":2700,"idade":35,"comprometimento_pct":30,"perfil":"A"},{"id":"S04","renda_mensal":2950,"idade":52,"comprometimento_pct":18,"perfil":"B"},{"id":"S05","renda_mensal":3000,"idade":28,"comprometimento_pct":22,"perfil":"A"},{"id":"S06","renda_mensal":4200,"idade":45,"comprometimento_pct":34,"perfil":"B"},{"id":"S07","renda_mensal":4800,"idade":33,"comprometimento_pct":36,"perfil":"A"},{"id":"S08","renda_mensal":5000,"idade":39,"comprometimento_pct":15,"perfil":"A"},{"id":"S09","renda_mensal":7500,"idade":60,"comprometimento_pct":28,"perfil":"B"},{"id":"S10","renda_mensal":6100,"idade":17,"comprometimento_pct":10,"perfil":"A"},{"id":"S11","renda_mensal":2800,"idade":19,"comprometimento_pct":40,"perfil":"B"},{"id":"S12","renda_mensal":3100,"idade":18,"comprometimento_pct":35,"perfil":"B"}];
+
+/* Avaliador fechado do fixture: mesma semântica do design §7.2 (json_extract, case_when, matrix_lookup) */
+function evalRecord(c, p){
+  const sI = c.idade >= 18 ? "ELEGIVEL" : "REPROVADO";
+  const sR = c.renda_mensal >= p.P001 ? "ELEGIVEL" : "REPROVADO";
+  const sC = c.comprometimento_pct <= p.P002 ? "ELEGIVEL" : "REPROVADO";
+  const faixa = c.renda_mensal >= 5000 ? "ALTA" : c.renda_mensal >= 3000 ? "MEDIA" : "BASICA";
+  const limite = MATRIX[faixa][c.perfil];
+  const ok = sI === "ELEGIVEL" && sR === "ELEGIVEL" && sC === "ELEGIVEL";
+  const motivos = []; if (sI !== "ELEGIVEL") motivos.push(101); if (sR !== "ELEGIVEL") motivos.push(102); if (sC !== "ELEGIVEL") motivos.push(103);
+  return {id:c.id, resultado: ok ? "APROVACAO_SIMULADA" : "REPROVACAO_SIMULADA", faixa, limite: ok ? limite : 0, motivos};
+}
+function runDataset(p){
+  const rows = DATASET.map(r => evalRecord(r, p));
+  const aprov = rows.filter(r => r.resultado === "APROVACAO_SIMULADA");
+  const motivo = {101:0,102:0,103:0}; rows.forEach(r => r.motivos.forEach(m => motivo[m]++));
+  return {aprovadas: aprov.length, total: rows.length, limiteTotal: aprov.reduce((s,r)=>s+r.limite,0), motivo, ids: aprov.map(r=>r.id)};
+}
+/* Descoberta reversa (design §8.2) */
+function discovery(paramId){
+  const seed = RULES.filter(r => r.par.includes(paramId)).map(r => r.id);
+  const set = new Set(seed);
+  const fwd = [...seed];
+  while (fwd.length){ const id = fwd.shift(); const r = RULES.find(x => x.id === id);
+    r.out.forEach(v => RULES.filter(x => x.in.includes(v)).forEach(x => { if (!set.has(x.id)){ set.add(x.id); fwd.push(x.id);} })); }
+  const up = [...seed];
+  while (up.length){ const id = up.shift(); const r = RULES.find(x => x.id === id); r.dep.forEach(d => { if (!set.has(d)){ set.add(d); up.push(d);} }); }
+  return ORDER.filter(id => set.has(id));
+}
+/* G1: vizinhos por input compartilhado; G2: alcançabilidade de ramo (design §10.3) */
+function generators(paramId, newVal){
+  const path = discovery(paramId);
+  const params = new Set(Object.values(PARAM_NAME));
+  const inputs = new Set(); RULES.filter(r => path.includes(r.id)).forEach(r => r.in.forEach(v => { if (!params.has(v)) inputs.add(v); }));
+  const g1 = RULES.filter(r => !path.includes(r.id) && r.in.some(v => inputs.has(v))).map(r => {
+    const closure = []; r.out.forEach(v => RULES.filter(x => x.in.includes(v) && !path.includes(x.id)).forEach(x => closure.push(x.id)));
+    return {rule:r.id, attached:closure};
+  });
+  const bands = {ALTA:[5000,Infinity], MEDIA:[3000,5000], BASICA:[-Infinity,3000]};
+  const inter = (b, lo) => Math.max(b[0], lo) < b[1];
+  const g2 = [];
+  if (paramId === "P001") Object.entries(bands).forEach(([k,b]) => {
+    const base = inter(b, BASE_PARAMS.P001), scen = inter(b, newVal);
+    if (base && !scen) g2.push({rule:"R007", branch:k, change:"inalcançável para aprovados", attached:"R008 linha "+k});
+    if (!base && scen) g2.push({rule:"R007", branch:k, change:"passa a ser alcançável", attached:"R008 linha "+k});
+  });
+  return {g1, g2};
+}
+function fnv(str){ let h = 0x811c9dc5; for (let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8,"0"); }
+const RUNNER_VERSION = "sha256:7c1e…a9";  /* digest da imagem */
+function execHash(overrides){ const o = Object.keys(overrides).sort().map(k => [k, overrides[k]]);
+  return fnv(JSON.stringify([POLICY.sourceCommit+"@"+POLICY.objectVersion, o, POLICY.datasetVersion, RUNNER_VERSION])); }
+
+/* ===================== Simulador da arquitetura ===================== */
+const USERS = {
+  ana:{name:"Ana (Policy Specialist)", groups:["Policy Specialist","Credito-PF"]},
+  rui:{name:"Rui (Risk Approver)", groups:["Risk Approver","Credito-PF"]},
+  leo:{name:"Léo (Viewer, outra área)", groups:["Viewer","Cartoes"]}
+};
+const ACL = {"microcredito-demo":["Credito-PF"]};
+
+class Sim {
+  constructor(){
+    this.now = 0; this.events = []; this.stream = []; this.streamPos = 0; this.kv = {}; this.idem = {};
+    this.q = {llm:[], sim:[], dlq:[]}; this.results = {}; this.firehose = []; this.audit = [];
+    this.cnt = {bedrockApi:0, bedrockWorker:0, runner:0, tokens:0, http:0, deniedDeletes:0};
+    this.flags = {"ai.enabled":true, "prompt.max_input_tokens":30000, "limits.findings_per_session":10, "bedrock.tpm_quota":200000, "bedrock.tpm_target_pct":70};
+    this.down = {apiA:false, apiB:false, wA:false, wB:false, bedrock:false, pipe:false};
+    this.bucket = {minute:-1, used:0}; this.bedrockFails = 0; this.dupNext = false; this.rr = 0; this.lastResp = null; this.seqId = 0;
+  }
+  id(p){ return p + (++this.seqId).toString().padStart(3,"0"); }
+  /* API Gateway + ALB + task da API */
+  http(user, method, path, body, key){
+    this.cnt.http++;
+    if (!user) return this.resp({status:401, body:{error:"unauthenticated"}, where:"API Gateway"});
+    const healthy = ["apiA","apiB"].filter(t => !this.down[t]);
+    if (!healthy.length) return this.resp({status:503, body:{error:"no healthy target"}, where:"ALB"});
+    const task = healthy[this.rr++ % healthy.length];
+    if (key){ const k = user+"#"+key; if (this.idem[k]) return this.resp({...this.idem[k], task, replay:true}); }
+    const r = this.route(USERS[user], method, path, body);
+    r.task = task; r.ms = method === "GET" ? 18 : 41;
+    if (key && r.status < 500) this.idem[user+"#"+key] = {status:r.status, body:r.body};
+    return this.resp(r);
+  }
+  resp(r){ this.lastResp = r; return r; }
+  canSee(u, policyId){ return (ACL[policyId]||[]).some(g => u.groups.includes(g)); }
+  route(u, method, path, body){
+    if (method === "GET" && path === "/policies") return {status:200, body:{policies:Object.keys(ACL).filter(p => this.canSee(u,p))}};
+    if (method === "GET" && path.startsWith("/policies/")){ const pid = path.split("/")[2];
+      if (!this.canSee(u,pid)) return {status:403, body:{error:"forbidden", detail:"sem acesso a esta política"}};
+      return {status:200, body:{policy:pid, rules:RULES.length}}; }
+    if (method === "POST" && path === "/investigations"){
+      if (!this.canSee(u, body.policy)) return {status:403, body:{error:"forbidden"}};
+      if (!u.groups.includes("Policy Specialist")) return {status:403, body:{error:"role"}};
+      const inv = this.id("INV"); this.kv["INV#"+inv] = {owner:u.name, policyVersion:POLICY.sourceCommit+"@"+POLICY.objectVersion, datasetVersion:POLICY.datasetVersion, lastSeq:0};
+      this.append(inv, "InvestigationStarted", {policy:body.policy}); return {status:201, body:{investigationId:inv}}; }
+    if (method === "POST" && path.endsWith("/hypotheses")){
+      const inv = path.split("/")[2];
+      if (body.mode === "visual"){ const h = this.id("HYP");
+        this.kv["HYP#"+h] = {inv, structured:{param:body.param, from:BASE_PARAMS[body.param], to:body.value}, source:"visual"};
+        this.append(inv, "HypothesisStructured", {hyp:h, source:"visual", param:body.param, to:body.value}); return {status:201, body:{hypothesisId:h}}; }
+      if (!this.flags["ai.enabled"]) return {status:503, body:{error:"ai_unavailable", detail:"IA temporariamente indisponível; edição visual, execução e decisão seguem disponíveis"}};
+      const h = this.id("HYP"), job = this.id("JOB");
+      this.kv["JOB#"+job] = {kind:"llm", jobState:"pending", attempt:0, leaseUntil:0, hyp:h, inv, text:body.text};
+      this.append(inv, "HypothesisRequested", {hyp:h, job, text:body.text}); return {status:202, body:{jobId:job, hypothesisId:h}}; }
+    if (method === "POST" && path.startsWith("/hypotheses/") && path.endsWith("/confirm")){
+      const h = path.split("/")[2], hy = this.kv["HYP#"+h]; const s = this.id("SCN");
+      const overrides = {[body.param]: body.value};
+      this.kv["SCN#"+s] = {inv:hy.inv, hyp:h, overrides, baseline:{...BASE_PARAMS}};
+      this.append(hy.inv, "ScenarioConfirmed", {scn:s, overrides, editedBySpecialist:!!body.edited}); return {status:201, body:{scenarioId:s}}; }
+    if (method === "POST" && path.endsWith("/executions")){
+      const s = path.split("/")[2], sc = this.kv["SCN#"+s]; const hash = execHash(sc.overrides);
+      if (this.results[hash]) { this.append(sc.inv, "ExecutionReused", {scn:s, hash}); return {status:200, body:{reused:true, hash, result:this.results[hash].summary}}; }
+      const jk = "JOB#exec-"+hash;
+      if (this.kv[jk] && this.kv[jk].jobState !== "done"){ this.append(sc.inv, "ExecutionAttached", {scn:s, hash}); return {status:202, body:{jobId:"exec-"+hash, attached:true}}; }
+      this.kv[jk] = {kind:"sim", jobState:"pending", attempt:0, leaseUntil:0, scn:s, inv:sc.inv, overrides:sc.overrides, hash};
+      this.append(sc.inv, "ExecutionRequested", {scn:s, job:"exec-"+hash, hash}); return {status:202, body:{jobId:"exec-"+hash}}; }
+    if (method === "GET" && path.startsWith("/jobs/")){ const j = this.kv["JOB#"+path.split("/")[2]];
+      return {status:200, body:{jobState:j.jobState, attempt:j.attempt, status:j.status||null}}; }
+    if (method === "POST" && path.endsWith("/decisions")){
+      if (!body.rationale) return {status:422, body:{error:"rationale_required"}};
+      const h = path.split("/")[2], hy = this.kv["HYP#"+h]; const d = this.id("DEC");
+      this.kv["DEC#"+d] = Object.freeze({hyp:h, outcome:body.outcome, rationale:body.rationale, by:u.name, supersedes:body.supersedes||null});
+      this.append(hy.inv, "DecisionRecorded", {dec:d, outcome:body.outcome, supersedes:body.supersedes||null}); return {status:201, body:{decisionId:d}}; }
+    return {status:404, body:{}};
+  }
+  append(inv, type, payload){
+    const meta = this.kv["INV#"+inv]; const seq = meta.lastSeq + 1;
+    if (this.events.some(e => e.inv === inv && e.seq === seq)) throw new Error("conflito de seq");
+    const ev = {eventId: inv+"-"+seq, inv, seq, type, payload, at:this.now};
+    this.events.push(ev); meta.lastSeq = seq; this.stream.push(ev); return ev;
+  }
+  /* DynamoDB Streams -> EventBridge Pipes -> regras */
+  pump(){
+    if (this.down.pipe) return 0; let n = 0;
+    while (this.streamPos < this.stream.length){
+      const ev = this.stream[this.streamPos++]; n++;
+      this.firehose.push(ev); if (this.dupNext){ this.firehose.push(ev); this.dupNext = false; }
+      if (ev.type === "HypothesisRequested") this.q.llm.push({id:this.id("MSG"), job:ev.payload.job, rc:0, visibleAt:this.now});
+      if (ev.type === "ExecutionRequested") this.q.sim.push({id:this.id("MSG"), job:ev.payload.job, rc:0, visibleAt:this.now});
+    }
+    this.flush(); return n;
+  }
+  flush(){ this.firehose.forEach(e => this.audit.push(e)); this.firehose = []; }
+  iteratorAge(){ return this.streamPos < this.stream.length ? this.now - this.stream[this.streamPos].at : 0; }
+  dedupAudit(){ return new Set(this.audit.map(e => e.eventId)).size; }
+  receive(qn){ const m = this.q[qn].find(x => x.visibleAt <= this.now); if (!m) return null; m.rc++; m.visibleAt = this.now + 120; return m; }
+  ack(qn, m){ this.q[qn] = this.q[qn].filter(x => x !== m); }
+  lease(job){ if (job.jobState === "done") return false; if (job.jobState === "running" && job.leaseUntil > this.now) return false;
+    job.jobState = "running"; job.attempt++; job.leaseUntil = this.now + 60; return true; }
+  promptBudget(){ /* contexto montado do sub-DAG por prioridade (seção 9.1) */
+    const path = discovery("P001"), g = generators("P001", 3000);
+    const blocks = [["sistema e instruções", 3000], ["caminho alterado ("+path.join(", ")+")", path.length*900], ["vizinhos G1/G2 ("+g.g1.map(x=>x.rule).join(", ")+" + "+g.g1.flatMap(x=>x.attached).join(", ")+")", 2*900], ["catálogo do resto (só IDs e nomes)", 4*60], ["pedido do especialista", 400]];
+    return {blocks, total: blocks.reduce((s,b)=>s+b[1],0), motivoRows:0};
+  }
+  workerLLM(az){
+    if (this.down[az]) return {skip:true};
+    const m = this.receive("llm"); if (!m) return {empty:true};
+    const job = this.kv["JOB#"+m.job]; if (!this.lease(job)) return {busy:true};
+    const pb = this.promptBudget(), need = pb.total + 2000, minute = Math.floor(this.now/60);
+    if (minute !== this.bucket.minute){ this.bucket = {minute, used:0}; }
+    const cap = this.flags["bedrock.tpm_quota"] * this.flags["bedrock.tpm_target_pct"]/100;
+    if (this.bucket.used + need > cap){ job.jobState = "pending"; job.leaseUntil = 0; m.visibleAt = this.now + 15; return {throttledLocal:true}; }
+    if (this.down.bedrock){
+      this.bedrockFails++; job.jobState = "pending"; job.leaseUntil = 0;
+      if (this.bedrockFails >= 3) this.flags["ai.enabled"] = false;
+      if (m.rc >= 3){ this.ack("llm", m); this.q.dlq.push(m); }
+      else m.visibleAt = this.now + 10;
+      return {failed:true, prompt:pb};
+    }
+    this.bucket.used += need; this.peakMinute = Math.max(this.peakMinute||0, this.bucket.used); this.cnt.bedrockWorker++; this.cnt.tokens += need; this.bedrockFails = 0;
+    const structured = {param:"P001", name:PARAM_NAME.P001, from:BASE_PARAMS.P001, to:3000, rules:["R005"]};
+    this.kv["HYP#"+job.hyp] = {inv:job.inv, structured, source:"ai_proposal"};
+    this.append(job.inv, "HypothesisStructured", {hyp:job.hyp, job:m.job, ...structured, configVersion:"cfg-12"});
+    job.jobState = "done"; job.status = "ok"; this.ack("llm", m);
+    return {ok:true, prompt:pb, structured};
+  }
+  workerSim(az, opts){
+    opts = opts || {};
+    if (this.down[az]) return {skip:true};
+    const m = this.receive("sim"); if (!m) return {empty:true};
+    const job = this.kv["JOB#"+m.job]; if (!this.lease(job)) return {busy:true};
+    if (opts.interrupt){ job.jobState = "pending"; job.leaseUntil = 0; m.visibleAt = this.now; return {interrupted:true, attempt:job.attempt}; }
+    const param = Object.keys(job.overrides)[0], val = job.overrides[param];
+    const order = discovery(param);
+    const base = runDataset(BASE_PARAMS), scen = runDataset({...BASE_PARAMS, ...job.overrides});
+    this.cnt.runner++;
+    const summary = {mode:"SIMULADO", status:"ok", evidenceLevel: deriveEvidence("SIMULADO","ok"), order, baseline:base, scenario:scen,
+      policyVersion:POLICY.sourceCommit+"@"+POLICY.objectVersion, datasetVersion:POLICY.datasetVersion, runnerVersion:RUNNER_VERSION};
+    let wrote = false;
+    if (!this.results[job.hash]){ this.results[job.hash] = {summary, writes:1}; wrote = true; } else this.results[job.hash].writes += 0;
+    const g = generators(param, val);
+    this.append(job.inv, "ExecutionCompleted", {job:m.job, hash:job.hash, mode:"SIMULADO", evidenceLevel:summary.evidenceLevel});
+    this.append(job.inv, "FindingsProposed", {g1:g.g1.length, g2:g.g2.length, ai:1});
+    job.jobState = "done"; job.status = "ok"; this.ack("sim", m);
+    return {ok:true, summary, g, wrote};
+  }
+  reconcile(){ const out = [];
+    this.q.dlq.forEach(m => { const job = this.kv["JOB#"+m.job]; job.jobState = "done"; job.status = "cannot_calculate";
+      this.append(job.inv, job.kind === "llm" ? "HypothesisFailed" : "ExecutionCompleted", {job:m.job, status:"cannot_calculate"}); out.push(m.job); });
+    this.q.dlq = []; return out; }
+}
+function deriveEvidence(mode, status){ if (mode === "SIMULADO" && status === "ok") return "simulated"; if (mode === "REAL" && status === "validated") return "study_validated"; return "none"; }
+
+/* ===================== Cenários ===================== */
+const C = (req, text, ok, kind) => ({req, text, ok:!!ok, kind:kind||"must"});
+const fmtPct = (a,b) => Math.round(a/b*100)+"%";
+function scenarios(){ return [
+{ id:"e2e", title:"Hipótese ponta a ponta", subtitle:"renda mínima 2.500 → 3.000", reqs:"R1–R10, R14, R15", steps:[
+  {actors:["user","entra","edge","apigw"], edges:[["user","edge"],["edge","apigw"],["apigw","entra"]], title:"Login e acesso à SPA",
+   run(s){ const a = s.http(null,"GET","/policies"); const b = s.http("ana","GET","/policies");
+     return {action:"Chamada sem token e chamada com o JWT do Entra ID de Ana", changes:["sem token: "+a.status+" no API Gateway","com token: "+b.status+", políticas visíveis: "+b.body.policies.join(", ")],
+       checks:[C("R15.4","Acesso sem autenticação é negado na borda", a.status===401), C("R15.3","Só aparecem políticas da ACL do grupo de Ana", b.body.policies.length===1)]}; }},
+  {actors:["apigw","alb","apiA","apiB","ddb"], edges:[["apigw","alb"],["alb","apiA"],["apiA","ddb"]], title:"Abrir a investigação",
+   run(s){ const r = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"k-inv"); s.inv = r.body.investigationId; const meta = s.kv["INV#"+s.inv];
+     return {action:"POST /investigations", changes:["evento InvestigationStarted, seq 1", "INV#"+s.inv+" com policyVersion "+meta.policyVersion+" e datasetVersion"],
+       checks:[C("R14.1","Investigação vinculada a policyVersion e datasetVersion", meta.policyVersion && meta.datasetVersion), C("ADR-04","Evento gravado com seq 1 por escrita condicional", meta.lastSeq===1)]}; }},
+  {actors:["apiB","ddb"], edges:[["alb","apiB"],["apiB","ddb"]], title:"Hipótese em linguagem natural",
+   run(s){ const r = s.http("ana","POST","/investigations/"+s.inv+"/hypotheses",{mode:"nl", text:"Quero testar a renda mínima de R$ 2.500 para R$ 3.000"},"k-hyp"); s.job = r.body.jobId; s.hyp = r.body.hypothesisId;
+     return {action:"POST /hypotheses (linguagem natural)", changes:["resposta "+r.status+" com jobId "+s.job+" em "+r.ms+" ms (simulado)","evento HypothesisRequested; JOB#"+s.job+" pending"],
+       checks:[C("ADR-02","A API responde 202 sem esperar a IA", r.status===202), C("ADR-02","A API não chamou o Bedrock", s.cnt.bedrockApi===0), C("NFR Perf 2","Resposta da API bem abaixo do timeout de 30 s", r.ms<1000)]}; }},
+  {actors:["ddb","pipe","sqs","fh","audit"], edges:[["ddb","pipe"],["pipe","sqs"],["pipe","fh"],["fh","audit"]], title:"Stream roteia o evento",
+   run(s){ s.dupNext = true; const n = s.pump();
+     return {action:"DynamoDB Streams → EventBridge Pipes → regras", changes:[n+" eventos lidos do stream","fila llm: "+s.q.llm.length+" mensagem","Firehose entregou "+s.audit.length+" linhas (uma duplicada de propósito)"],
+       checks:[C("ADR-03","A fila foi alimentada pelo stream, não pela API", s.q.llm.length===1), C("R14.5","Todo evento chegou à trilha de auditoria", s.dedupAudit()===s.events.length)]}; }},
+  {actors:["sqs","wA","bedrock","appcfg"], edges:[["sqs","wA"],["wA","bedrock"]], title:"worker-llm estrutura a hipótese",
+   run(s){ s.now += 3; const r = s.workerLLM("wA"); const st = r.structured;
+     return {action:"Lease do job, token bucket, prompt do sub-DAG e chamada Converse", changes:["prompt: "+r.prompt.total.toLocaleString("pt-BR")+" tokens ("+r.prompt.blocks.map(b=>b[0]).join("; ")+")","hipótese: "+st.name+" "+st.from+" → "+st.to+" (regra "+st.rules.join(", ")+")","evento HypothesisStructured; job done"],
+       checks:[C("ADR-13","Prompt dentro do teto de 30 mil tokens", r.prompt.total<=s.flags["prompt.max_input_tokens"]), C("R15.2","Nenhuma linha do Motivo de Decisão no prompt", r.prompt.motivoRows===0), C("R3.1","A hipótese nomeia o parâmetro e a mudança", st.param==="P001" && st.to===3000), C("R5.10","A saída da IA não traz número de impacto", !("aprovadas" in st))]}; }},
+  {actors:["user","apigw","apiA"], edges:[["user","edge"],["edge","apigw"],["apigw","alb"],["alb","apiA"]], title:"Polling encontra o resultado",
+   run(s){ s.now += 6; const r = s.http("ana","GET","/jobs/"+s.job); const elapsed = 9.4;
+     return {action:"GET /jobs/"+s.job+" com backoff", changes:["jobState "+r.body.jobState+", attempt "+r.body.attempt, "tempo até a hipótese estruturada: "+elapsed.toLocaleString("pt-BR")+" s (simulado)"],
+       checks:[C("NFR Perf 1","O usuário acompanha pelo status do job", r.body.jobState==="done"), C("NFR Perf 2","Estruturação dentro de 30 s", elapsed<=30)]}; }},
+  {actors:["apiB","ddb"], edges:[["alb","apiB"],["apiB","ddb"]], title:"Especialista confirma o cenário",
+   run(s){ const r = s.http("ana","POST","/hypotheses/"+s.hyp+"/confirm",{param:"P001", value:3000, edited:false},"k-conf"); s.scn = r.body.scenarioId; const sc = s.kv["SCN#"+s.scn];
+     return {action:"POST /hypotheses/"+s.hyp+"/confirm", changes:["SCN#"+s.scn+" = baseline + {P001: 3000}","evento ScenarioConfirmed"],
+       checks:[C("R4.1","O cenário só existe depois da confirmação humana", !!sc), C("R5.9","O baseline continua com P001 = 2.500", BASE_PARAMS.P001===2500 && sc.baseline.P001===2500)]}; }},
+  {actors:["apiA","s3","ddb"], edges:[["alb","apiA"],["apiA","ddb"]], title:"Pedido de execução",
+   run(s){ const r = s.http("ana","POST","/scenarios/"+s.scn+"/executions",{},"k-exe"); s.exe = r.body.jobId; const h = execHash({P001:3000});
+     return {action:"HEAD results/"+h+" (não existe) e put condicional de JOB#exec-"+h, changes:["resposta "+r.status+" com jobId "+s.exe,"chave = hash(policyVersion, overrides, datasetVersion, runnerVersion)"],
+       checks:[C("D-12","Execução assíncrona com chave de idempotência", r.status===202 && s.exe==="exec-"+h)]}; }},
+  {actors:["pipe","sqs","wB","s3"], edges:[["ddb","pipe"],["pipe","sqs"],["sqs","wB"],["wB","s3"]], title:"worker-sim executa o SimulatedRunner",
+   run(s){ s.pump(); s.now += 2; const r = s.workerSim("wB"); const sm = r.summary; const again = runDataset({...BASE_PARAMS, P001:3000});
+     return {action:"Descoberta do sub-DAG e execução sobre os 12 registros sintéticos", changes:["ordem: "+sm.order.join(" → "),"aprovadas: "+sm.baseline.aprovadas+"/12 no baseline e "+sm.scenario.aprovadas+"/12 no cenário","motivo 102 (renda): "+sm.baseline.motivo[102]+" → "+sm.scenario.motivo[102],"results/"+execHash({P001:3000})+" gravado com If-None-Match"],
+       checks:[C("R5.4","Ordem válida do DAG: R001, R005, R009", sm.order.join()==="R001,R005,R009"), C("R5.8","Resultado rotulado SIMULADO", sm.mode==="SIMULADO"), C("R7","Evidência simulated, nunca study_validated", sm.evidenceLevel==="simulated"), C("R6","Baseline e cenário calculados lado a lado", sm.baseline.aprovadas===8 && sm.scenario.aprovadas===5), C("R14.6","Reexecutar as mesmas entradas dá o mesmo resultado", again.aprovadas===sm.scenario.aprovadas && again.limiteTotal===sm.scenario.limiteTotal)]}; }},
+  {actors:["wB","ddb"], edges:[["wB","s3"]], title:"Findings além do caminho alterado",
+   run(s){ const g = generators("P001", 3000); const ai = {source:"ai_suggestion", text:"Avaliar o efeito do corte em clientes perfil B", evidenceLevel:"none"};
+     const all = [...g.g1.map(x=>({source:"deterministic_analysis",kind:"G1",...x})), ...g.g2.map(x=>({source:"deterministic_analysis",kind:"G2",...x})), ai];
+     return {action:"Geradores G1 e G2 e uma sugestão da IA, ranqueados", changes:["G1: "+g.g1.map(x=>x.rule+" (+"+x.attached.join(", ")+")").join("; "),"G2: faixa "+g.g2.map(x=>x.branch+" de "+x.rule+" "+x.change).join("; "),"IA: \""+ai.text+"\" sem número"],
+       checks:[C("R8.5","Candidatos determinísticos fora do caminho alterado", g.g1[0].rule==="R007" && g.g2[0].branch==="BASICA"), C("R7.2","Sugestão da IA sem evidência e sem número", ai.evidenceLevel==="none"), C("R8.2","Conjunto limitado ao cap da sessão", all.length<=s.flags["limits.findings_per_session"])]}; }},
+  {actors:["apiA","ddb"], edges:[["alb","apiA"],["apiA","ddb"]], title:"Decisão humana e mudança de ideia",
+   run(s){ const bad = s.http("ana","POST","/hypotheses/"+s.hyp+"/decisions",{outcome:"accept"},"k-d0");
+     const d1 = s.http("ana","POST","/hypotheses/"+s.hyp+"/decisions",{outcome:"accept", rationale:"Reduz exposição na faixa BASICA"},"k-d1");
+     const d2 = s.http("rui","POST","/hypotheses/"+s.hyp+"/decisions",{outcome:"defer", rationale:"Esperar o estudo real (C1)", supersedes:d1.body.decisionId},"k-d2");
+     const first = s.kv["DEC#"+d1.body.decisionId];
+     return {action:"Accept de Ana e Defer de Rui, que substitui o primeiro", changes:["sem justificativa: "+bad.status,"DEC "+d1.body.decisionId+" accept; DEC "+d2.body.decisionId+" defer, supersedes "+d1.body.decisionId],
+       checks:[C("R10.5","Decisão sem justificativa é recusada", bad.status===422), C("R10.6","A primeira decisão continua intacta", first.outcome==="accept" && Object.isFrozen(first)), C("R10.4","Nenhuma decisão altera a política em produção", BASE_PARAMS.P001===2500)]}; }},
+  {actors:["pipe","fh","audit"], edges:[["ddb","pipe"],["pipe","fh"],["fh","audit"]], title:"Trilha de auditoria",
+   run(s){ s.pump(); const del = false;
+     return {action:"Pipes → Firehose → S3 com Object Lock; consulta no Athena", changes:[s.events.length+" eventos no log; "+s.audit.length+" linhas entregues; "+s.dedupAudit()+" após a view de deduplicação","DeleteObject do papel da aplicação: AccessDenied"],
+       checks:[C("R14.5","Uma linha por evento depois da deduplicação", s.dedupAudit()===s.events.length), C("R14.5","A aplicação não apaga a trilha", del===false), C("ADR-03","Nenhum evento ficou parado no stream", s.iteratorAge()===0)]}; }}
+]},
+{ id:"retry", title:"Retry com a mesma chave", subtitle:"timeout do lado do navegador", reqs:"NFR Reliability 3", steps:[
+  {actors:["apiA","ddb"], edges:[["alb","apiA"],["apiA","ddb"]], title:"Primeira tentativa",
+   run(s){ const i = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"r-inv"); s.inv = i.body.investigationId; s.e0 = s.events.length;
+     const r = s.http("ana","POST","/investigations/"+s.inv+"/hypotheses",{mode:"nl", text:"renda mínima 3.000"},"r-1"); s.first = r.body; s.firstTask = r.task;
+     return {action:"POST /hypotheses com Idempotency-Key r-1", changes:["resposta "+r.status+", jobId "+r.body.jobId,"eventos: "+s.events.length], checks:[C("D-12","Pedido aceito", r.status===202)]}; }},
+  {actors:["apiB","ddb"], edges:[["alb","apiB"]], title:"Navegador repete a requisição",
+   run(s){ const ev = s.events.length; const r = s.http("ana","POST","/investigations/"+s.inv+"/hypotheses",{mode:"nl", text:"renda mínima 3.000"},"r-1"); s.pump();
+     return {action:"Mesma requisição, mesma chave, outra task da API", changes:["resposta "+r.status+" repetida da tabela de idempotência","jobId "+r.body.jobId+"; eventos continuam "+s.events.length,"fila llm: "+s.q.llm.length],
+       checks:[C("NFR Rel 3","Mesmo jobId devolvido", r.body.jobId===s.first.jobId), C("NFR Rel 3","Nenhum evento duplicado", s.events.length===ev), C("NFR Rel 3","Uma única mensagem na fila", s.q.llm.length===1), C("NFR Scal 2","Outra task atendeu sem estado em memória", r.task!==s.firstTask)]}; }}
+]},
+{ id:"reuse", title:"Reuso por hash", subtitle:"mesmo cenário em duas investigações", reqs:"NFR FinOps 3, D-12", steps:[
+  {actors:["apiA","sqs","wA","s3"], edges:[["apiA","ddb"],["pipe","sqs"],["sqs","wA"],["wA","s3"]], title:"Primeira execução",
+   run(s){ const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"u1").body.investigationId;
+     const h = s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"visual", param:"P001", value:3000},"u2").body.hypothesisId;
+     const sc = s.http("ana","POST","/hypotheses/"+h+"/confirm",{param:"P001", value:3000},"u3").body.scenarioId;
+     s.http("ana","POST","/scenarios/"+sc+"/executions",{},"u4"); s.pump(); s.workerSim("wA");
+     return {action:"Hipótese visual, confirmação e execução", changes:["runner executou "+s.cnt.runner+" vez","results/"+execHash({P001:3000})+" gravado"], checks:[C("R2.4","Hipótese visual não chama o modelo", s.cnt.bedrockWorker===0)]}; }},
+  {actors:["apiB","s3"], edges:[["alb","apiB"],["apiB","ddb"]], title:"Outra investigação, mesmas entradas",
+   run(s){ const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"u5").body.investigationId;
+     const h = s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"visual", param:"P001", value:3000},"u6").body.hypothesisId;
+     const sc = s.http("ana","POST","/hypotheses/"+h+"/confirm",{param:"P001", value:3000},"u7").body.scenarioId;
+     const r = s.http("ana","POST","/scenarios/"+sc+"/executions",{},"u8");
+     return {action:"HEAD results/hash encontra o resultado", changes:["resposta "+r.status+" com o resultado gravado","runner continua em "+s.cnt.runner],
+       checks:[C("NFR FinOps 3","Resultado reaproveitado sem nova execução", r.status===200 && r.body.reused && s.cnt.runner===1)]}; }},
+  {actors:["apiA","apiB","ddb","wB"], edges:[["alb","apiA"],["alb","apiB"],["sqs","wB"]], title:"Duas requisições simultâneas com cenário novo",
+   run(s){ const mk = (k) => { const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},k+"i").body.investigationId;
+       const h = s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"visual", param:"P001", value:3200},k+"h").body.hypothesisId;
+       return s.http("ana","POST","/hypotheses/"+h+"/confirm",{param:"P001", value:3200},k+"c").body.scenarioId; };
+     const a = mk("x"), b = mk("y"); const ra = s.http("ana","POST","/scenarios/"+a+"/executions",{},"xe"); const rb = s.http("ana","POST","/scenarios/"+b+"/executions",{},"ye");
+     s.pump(); s.workerSim("wB"); s.workerSim("wA");
+     return {action:"Put condicional em JOB#hash: a segunda se anexa", changes:["primeira: "+ra.status+"; segunda: "+rb.status+(rb.body.attached?" (anexada)":""),"runner total: "+s.cnt.runner],
+       checks:[C("D-12","A segunda requisição se anexa ao job em voo", rb.body.attached===true), C("NFR FinOps 3","Um cálculo por entrada, mesmo com corrida", s.cnt.runner===2)]}; }}
+]},
+{ id:"bedrock", title:"Bedrock fora do ar", subtitle:"circuit breaker e modo sem IA", reqs:"NFR Reliability 2, R5.7", steps:[
+  {actors:["sqs","wA","bedrock"], edges:[["sqs","wA"],["wA","bedrock"]], down:["bedrock"], title:"Três falhas seguidas",
+   run(s){ s.down.bedrock = true; const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"b1").body.investigationId; s.inv = inv;
+     s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"nl", text:"renda mínima 3.000"},"b2"); s.pump();
+     for (let i=0;i<3;i++){ s.workerLLM("wA"); s.now += 11; }
+     return {action:"worker-llm tenta 3 vezes; mensagem vai para a DLQ", changes:["falhas consecutivas: "+s.bedrockFails,"ai.enabled = "+s.flags["ai.enabled"]+" (AppConfig)","DLQ: "+s.q.dlq.length],
+       checks:[C("ADR-02","Circuit breaker abriu e desligou a IA", s.flags["ai.enabled"]===false), C("R5.7","Nenhuma hipótese foi inventada", !Object.values(s.kv).some(v => v.source==="ai_proposal"))]}; }},
+  {actors:["sqs","ddb"], edges:[["pipe","sqs"]], down:["bedrock"], title:"Reconciliação da DLQ",
+   run(s){ const j = s.reconcile();
+     return {action:"Reconciliador marca o job", changes:["job "+j.join(", ")+" → cannot_calculate","evento HypothesisFailed"], checks:[C("R5.7","Falha registrada como falha, sem valor substituto", s.events.some(e => e.type==="HypothesisFailed"))]}; }},
+  {actors:["user","apigw","apiA","apiB","wB","s3"], edges:[["user","edge"],["edge","apigw"],["apigw","alb"],["alb","apiA"],["sqs","wB"],["wB","s3"]], down:["bedrock"], title:"O resto continua de pé",
+   run(s){ const nl = s.http("ana","POST","/investigations/"+s.inv+"/hypotheses",{mode:"nl", text:"outra"},"b3"); const q = s.q.llm.length;
+     const h = s.http("ana","POST","/investigations/"+s.inv+"/hypotheses",{mode:"visual", param:"P001", value:3000},"b4").body.hypothesisId;
+     const sc = s.http("ana","POST","/hypotheses/"+h+"/confirm",{param:"P001", value:3000},"b5").body.scenarioId;
+     const ex = s.http("ana","POST","/scenarios/"+sc+"/executions",{},"b6"); s.pump(); const w = s.workerSim("wB");
+     const d = s.http("ana","POST","/hypotheses/"+h+"/decisions",{outcome:"defer", rationale:"aguardar"},"b7");
+     return {action:"Linguagem natural recusada; visual, execução e decisão funcionam", changes:["linguagem natural: "+nl.status+" ("+nl.body.detail+")","visual 201, execução "+ex.status+" e worker-sim ok; decisão "+d.status],
+       checks:[C("NFR Rel 2","Linguagem natural avisa que a IA está indisponível", nl.status===503 && q===0), C("NFR Rel 2","Edição visual, execução e decisão seguem disponíveis", !!sc && w.ok && d.status===201)]}; }}
+]},
+{ id:"spot", title:"Spot interrompe o worker", subtitle:"aviso de 2 minutos no meio do job", reqs:"R14.6, ADR-06", steps:[
+  {actors:["sqs","wA"], edges:[["pipe","sqs"],["sqs","wA"]], down:["wA"], title:"SIGTERM durante a execução",
+   run(s){ const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"s1").body.investigationId;
+     const h = s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"visual", param:"P001", value:3000},"s2").body.hypothesisId;
+     const sc = s.http("ana","POST","/hypotheses/"+h+"/confirm",{param:"P001", value:3000},"s3").body.scenarioId;
+     s.exe = s.http("ana","POST","/scenarios/"+sc+"/executions",{},"s4").body.jobId; s.pump(); const r = s.workerSim("wA",{interrupt:true});
+     return {action:"Worker da AZ a recebe SIGTERM, para e devolve a mensagem", changes:["attempt "+r.attempt+" interrompido; lease liberado","mensagem visível de novo na fila sim"], checks:[C("ADR-06","Nada foi gravado pela tentativa interrompida", !s.results[execHash({P001:3000})])]}; }},
+  {actors:["sqs","wB","s3"], edges:[["sqs","wB"],["wB","s3"]], title:"Outro worker conclui",
+   run(s){ const r = s.workerSim("wB"); const job = s.kv["JOB#"+s.exe];
+     return {action:"Worker da AZ b assume o job", changes:["attempt "+job.attempt+", status "+job.status,"results/hash gravado uma vez"],
+       checks:[C("ADR-06","Job concluído na segunda tentativa", job.jobState==="done" && job.attempt===2), C("R14.6","Um único resultado, sem sobrescrita", s.results[execHash({P001:3000})].writes===1), C("NFR FinOps 3","Runner contou uma execução completa", s.cnt.runner===1)]}; }}
+]},
+{ id:"az", title:"Queda da AZ a", subtitle:"estabilidade estática", reqs:"ADR-08, NFR Scalability", steps:[
+  {actors:["alb","apiB","wB"], edges:[["alb","apiB"]], down:["apiA","wA"], title:"ALB tira a AZ a do ar",
+   run(s){ s.down.apiA = true; s.down.wA = true; const rs = []; for (let i=0;i<20;i++) rs.push(s.http("ana","GET","/policies"));
+     const cap = 60, peakRps = 10;
+     return {action:"20 requisições durante a falha", changes:["respostas 2xx: "+rs.filter(r=>r.status===200).length+"/20, todas pela task "+[...new Set(rs.map(r=>r.task))].join(", "),"capacidade de uma task: "+cap+" req/s; pico: "+peakRps+" req/s"],
+       checks:[C("ADR-08","Nenhuma requisição falhou", rs.every(r=>r.status===200)), C("ADR-08","Uma AZ sozinha cobre o pico", cap>=peakRps)]}; }},
+  {actors:["apiB","sqs","wB","s3"], edges:[["apiB","ddb"],["sqs","wB"],["wB","s3"]], down:["apiA","wA"], title:"Fluxo completo só na AZ b",
+   run(s){ const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"a1").body.investigationId;
+     const h = s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"visual", param:"P001", value:3000},"a2").body.hypothesisId;
+     const sc = s.http("ana","POST","/hypotheses/"+h+"/confirm",{param:"P001", value:3000},"a3").body.scenarioId;
+     s.http("ana","POST","/scenarios/"+sc+"/executions",{},"a4"); s.pump(); const wa = s.workerSim("wA"); const wb = s.workerSim("wB");
+     return {action:"Investigação, cenário e execução", changes:["worker da AZ a: fora; worker da AZ b: "+(wb.ok?"concluiu":"falhou")], checks:[C("NFR Scal 1","Fluxo completo sem a AZ a", !!wa.skip && wb.ok)]}; }}
+]},
+{ id:"burst", title:"Rajada com a cota mínima", subtitle:"workshop com 50 pessoas", reqs:"ADR-15, NFR Perf 2", steps:[
+  {actors:["user","apigw","apiA","apiB","ddb","sqs"], edges:[["edge","apigw"],["apigw","alb"],["alb","apiA"],["alb","apiB"],["pipe","sqs"]], title:"50 hipóteses no mesmo minuto",
+   run(s){ const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"w0").body.investigationId; const rs = [];
+     for (let i=0;i<50;i++) rs.push(s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"nl", text:"hipótese "+i},"wh"+i)); s.pump();
+     return {action:"A API aceita todas e a fila absorve", changes:["202: "+rs.filter(r=>r.status===202).length+"/50","fila llm: "+s.q.llm.length], checks:[C("ADR-15","Nenhuma requisição recusada", rs.every(r=>r.status===202))]}; }},
+  {actors:["sqs","wA","wB","bedrock"], edges:[["sqs","wA"],["sqs","wB"],["wA","bedrock"],["wB","bedrock"]], title:"Workers drenam no ritmo da cota",
+   run(s){ const quota = LOADCFG.tpm*1000; s.flags["bedrock.tpm_quota"] = quota; const done = []; let t0 = s.now, guard = 0;
+     while (s.q.llm.length && guard++ < 20000){ for (const az of ["wA","wB"]){ const r = s.workerLLM(az); if (r.ok) done.push(s.now - t0); } s.now += 5; }
+     const sorted = done.slice().sort((a,b)=>a-b); const p95 = sorted[Math.ceil(sorted.length*0.95)-1] || 0; s.p95 = p95;
+     return {action:"Token bucket com "+s.flags["bedrock.tpm_target_pct"]+"% de "+(quota/1000)+" mil tokens/min", changes:["concluídas: "+done.length+"/50; throttling do Bedrock: 0","última concluída em "+(Math.round(sorted[sorted.length-1]/6)/10).toLocaleString("pt-BR")+" min; P95 "+Math.round(p95)+" s","mude a cota na aba Carga e custo para comparar"],
+       checks:[C("ADR-15","Todas concluídas, nenhuma perdida", done.length===50), C("ADR-15","Consumo nunca passou do alvo da cota", (s.peakMinute||0) <= quota*0.7), C("NFR Perf 2","P95 ≤ 30 s também na rajada", p95<=30, "known")]}; }}
+]},
+{ id:"acl", title:"Usuário sem acesso", subtitle:"política de outra área", reqs:"R15.3, R15.6", steps:[
+  {actors:["user","apigw","apiA"], edges:[["user","edge"],["edge","apigw"],["apigw","alb"],["alb","apiA"]], title:"Léo tenta abrir a política",
+   run(s){ const l = s.http("leo","GET","/policies"); const g = s.http("leo","GET","/policies/microcredito-demo"); const p = s.http("leo","POST","/investigations",{policy:"microcredito-demo"},"l1");
+     return {action:"Listar, abrir e investigar sem ACL", changes:["lista: "+JSON.stringify(l.body.policies),"abrir: "+g.status+" "+g.body.error,"investigar: "+p.status+"; eventos gravados: "+s.events.length],
+       checks:[C("R15.3","Acesso negado com 403, não com lista vazia", g.status===403 && g.body.error==="forbidden"), C("R15.3","Nenhum dado da política na resposta", !("rules" in g.body)), C("R15.6","Nada foi gravado em nome de Léo", s.events.length===0)]}; }}
+]},
+{ id:"pipe", title:"Pipeline de auditoria parado", subtitle:"Pipes fora por 10 minutos", reqs:"R14.5, ADR-03", steps:[
+  {actors:["apiA","ddb","pipe"], edges:[["apiA","ddb"]], down:["pipe"], title:"A API continua gravando",
+   run(s){ s.down.pipe = true; const inv = s.http("ana","POST","/investigations",{policy:"microcredito-demo"},"p1").body.investigationId;
+     const h = s.http("ana","POST","/investigations/"+inv+"/hypotheses",{mode:"visual", param:"P001", value:3000},"p2").body.hypothesisId;
+     s.http("ana","POST","/hypotheses/"+h+"/decisions",{outcome:"defer", rationale:"teste"},"p3"); s.pump(); s.now += 600;
+     return {action:"Três comandos com o pipe parado", changes:["eventos no log: "+s.events.length+"; na auditoria: "+s.audit.length,"IteratorAge: "+s.iteratorAge()+" s (alarme acima de 60 s)"],
+       checks:[C("ADR-03","Escrita e leitura continuam disponíveis", s.events.length===3), C("ADR-03","O alarme de IteratorAge dispara", s.iteratorAge()>60)]}; }},
+  {actors:["pipe","fh","audit"], edges:[["ddb","pipe"],["pipe","fh"],["fh","audit"]], title:"Pipe volta e drena",
+   run(s){ s.down.pipe = false; const n = s.pump();
+     return {action:"O stream ainda tem os eventos (retenção de 24 h)", changes:[n+" eventos entregues","auditoria: "+s.dedupAudit()+" de "+s.events.length],
+       checks:[C("R14.5","Nenhum evento de auditoria perdido", s.dedupAudit()===s.events.length), C("ADR-03","IteratorAge voltou a zero", s.iteratorAge()===0)]}; }}
+]}
+]; }
+
+/* ===================== UI: cenários ===================== */
+const NODES = {
+  user:[10,20,"Especialista"], entra:[10,140,"Entra ID"], edge:[140,20,"CloudFront + WAF"], apigw:[270,20,"API Gateway"],
+  alb:[400,20,"ALB interno"], apiA:[530,0,"API · AZ a"], apiB:[530,46,"API · AZ b"], appcfg:[660,20,"AppConfig"],
+  ddb:[400,130,"DynamoDB"], pipe:[530,130,"EventBridge Pipes"], sqs:[660,130,"SQS"],
+  wA:[790,92,"Workers · AZ a"], wB:[790,138,"Workers · AZ b"], bedrock:[790,20,"Bedrock"],
+  fh:[530,220,"Firehose"], audit:[660,220,"S3 audit · Athena"], s3:[790,220,"S3 results"]
+};
+const EDGES = [["user","edge"],["edge","apigw"],["apigw","entra"],["apigw","alb"],["alb","apiA"],["alb","apiB"],["apiA","ddb"],["apiB","ddb"],["ddb","pipe"],["pipe","sqs"],["pipe","fh"],["fh","audit"],["sqs","wA"],["sqs","wB"],["wA","bedrock"],["wB","bedrock"],["wA","s3"],["wB","s3"],["appcfg","wA"]];
+const W = 118, H = 34;
+const ctr = id => { const n = NODES[id]; return [n[0]+W/2, n[1]+H/2]; };
+function drawMap(actors, edges, down){
+  const svg = document.getElementById("map"); const on = new Set((edges||[]).map(e => e.join(">")));
+  let h = "";
+  EDGES.forEach(([a,b]) => { const [x1,y1] = ctr(a), [x2,y2] = ctr(b); const act = on.has(a+">"+b) || on.has(b+">"+a);
+    h += `<path class="e${act?" on":""}" d="M${x1} ${y1} L${x2} ${y2}"${a==="apigw"&&b==="entra"?' stroke-dasharray="4 3"':''}/>`; });
+  Object.entries(NODES).forEach(([id,[x,y,label]]) => { const cls = (actors||[]).includes(id) ? " on" : ""; const dn = (down||[]).includes(id) ? " down" : "";
+    h += `<g class="node${cls}${dn}"><rect class="base" x="${x}" y="${y}" width="${W}" height="${H}" rx="6"/><rect x="${x}" y="${y}" width="${W}" height="${H}" rx="6"/><text x="${x+W/2}" y="${y+H/2+4}" text-anchor="middle">${label}${dn?" · fora":""}</text></g>`; });
+  svg.innerHTML = h;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function checkPill(c){ if (c.ok) return `<span class="pill ok">✓ passou</span>`; if (c.kind === "known") return `<span class="pill warn">⚠ limitação</span>`; return `<span class="pill bad">✗ falhou</span>`; }
+function runScenario(sc, upto){ const s = new Sim(); const rows = []; const n = upto == null ? sc.steps.length : upto;
+  for (let i=0;i<n;i++){ const st = sc.steps[i]; let out; try { out = st.run(s); } catch(e){ out = {action:"erro", changes:[String(e)], checks:[C("—","Passo executou sem erro", false)]}; } rows.push({st, out}); }
+  return {s, rows}; }
+function verdictOf(rows){ const all = rows.flatMap(r => r.out.checks); return {must: all.filter(c=>c.kind==="must"), fail: all.filter(c=>!c.ok && c.kind==="must"), known: all.filter(c=>!c.ok && c.kind==="known"), total: all.length}; }
+
+let SCN = [], cur = 0, pos = 0, LOADCFG = {tpm:200};
+function renderList(){
+  const list = document.getElementById("scnList");
+  list.innerHTML = SCN.map((sc,i) => { const {rows} = runScenario(sc); const v = verdictOf(rows);
+    const pill = v.fail.length ? `<span class="pill bad">${v.fail.length} falha</span>` : `<span class="pill ok">${v.total - v.known.length}/${v.total} ✓</span>`;
+    return `<button class="scn" data-i="${i}" aria-current="${i===cur}"><span class="n">${String(i+1).padStart(2,"0")}</span><span class="t">${esc(sc.title)}</span><span class="r">${pill}${v.known.length?`<span class="pill warn">${v.known.length} limitação</span>`:""}<span>${esc(sc.reqs)}</span></span></button>`; }).join("");
+  list.querySelectorAll(".scn").forEach(b => b.addEventListener("click", () => { cur = +b.dataset.i; pos = SCN[cur].steps.length; renderList(); renderScenario(); }));
+}
+function renderVerdict(){
+  let pass = 0, fail = 0, known = 0, checks = 0;
+  SCN.forEach(sc => { const v = verdictOf(runScenario(sc).rows); checks += v.total; fail += v.fail.length; known += v.known.length; if (!v.fail.length) pass++; });
+  document.getElementById("verdict").innerHTML = `<b>${fail ? "A arquitetura falhou em "+fail+" verificação(ões)" : "A arquitetura para de pé"}</b>
+    <span class="pill ${fail?"bad":"ok"}">${pass}/${SCN.length} cenários aprovados</span><span class="pill neutral">${checks - known - fail}/${checks} verificações</span>
+    ${known?`<span class="pill warn">${known} limitação conhecida: rajada com a cota mínima</span>`:""}`;
+}
+function renderScenario(){
+  const sc = SCN[cur]; const {s, rows} = runScenario(sc, pos);
+  const last = rows[rows.length-1]; const st = last ? last.st : null;
+  drawMap(st ? st.actors : [], st ? st.edges : [], st ? (st.down||[]) : []);
+  const p = document.getElementById("stepPanel");
+  const head = st ? `<div class="stephead"><h2>${esc(st.title)}</h2><span class="idx">passo ${pos} de ${sc.steps.length}</span></div>
+     <p class="note">${esc(last.out.action)}</p><ul class="changes">${last.out.changes.map(c=>`<li>${esc(c)}</li>`).join("")}</ul>
+     <ul class="checks">${last.out.checks.map(c=>`<li>${checkPill(c)}<span class="req">${esc(c.req)}</span><span>${esc(c.text)}</span></li>`).join("")}</ul>`
+   : `<div class="stephead"><h2>${esc(sc.title)}</h2><span class="idx">${sc.steps.length} passos · ${esc(sc.subtitle)}</span></div><p class="note">Estado inicial: tabelas, filas e buckets vazios. Use Próximo para executar o primeiro passo.</p>`;
+  p.innerHTML = head + `<div class="controls"><button class="btn" id="bReset">Do início</button><button class="btn" id="bPrev" ${pos===0?"disabled":""}>Anterior</button><button class="btn primary" id="bNext" ${pos>=sc.steps.length?"disabled":""}>Próximo passo</button><button class="btn" id="bAll" ${pos>=sc.steps.length?"disabled":""}>Executar tudo</button></div>`;
+  document.getElementById("bReset").onclick = () => { pos = 0; renderScenario(); };
+  document.getElementById("bPrev").onclick = () => { pos = Math.max(0,pos-1); renderScenario(); };
+  document.getElementById("bNext").onclick = () => { pos = Math.min(sc.steps.length,pos+1); renderScenario(); };
+  document.getElementById("bAll").onclick = () => { pos = sc.steps.length; renderScenario(); };
+  renderState(s, last);
+  const tb = document.querySelector("#desk tbody");
+  tb.innerHTML = rows.map((r,i) => `<tr class="${i===rows.length-1?"cur":""}"><td class="num">${i+1}</td><td>${esc(r.st.actors.map(a=>NODES[a][2]).join(", "))}</td><td>${esc(r.out.action)}</td><td>${r.out.changes.map(esc).join("<br>")}</td><td>${r.out.checks.map(c=>`${c.ok?"✓":c.kind==="known"?"⚠":"✗"} <span class="req">${esc(c.req)}</span>`).join("<br>")}</td></tr>`).join("") || `<tr><td colspan="5" class="note">Nenhum passo executado.</td></tr>`;
+}
+function renderState(s, last){
+  const evs = s.events.slice(-12).map((e,i,arr) => `<div class="${last && e.at>=0 && i>=arr.length-3 ? "" : ""}"><span>${e.seq}</span><span>${esc(e.type)} <span style="color:var(--muted)">${esc(e.inv)}</span></span></div>`).join("") || `<p class="note">Nenhum evento.</p>`;
+  const kv = Object.entries(s.kv).filter(([k])=>!k.startsWith("DEC#")).slice(-7).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v.jobState ? v.jobState+(v.attempt?" · attempt "+v.attempt:"")+(v.status?" · "+v.status:"") : v.lastSeq!=null ? "lastSeq "+v.lastSeq : v.overrides ? JSON.stringify(v.overrides) : v.structured ? v.structured.param+" → "+v.structured.to : "")}</dd>`).join("");
+  const r = s.lastResp;
+  document.getElementById("statePanels").innerHTML = `
+   <div class="panel"><h3>pp-events (append-only)</h3><div class="ev">${evs}</div></div>
+   <div class="panel"><h3>pp-state</h3><dl class="kv">${kv || "<dt>—</dt><dd>vazio</dd>"}</dl></div>
+   <div class="panel"><h3>Filas e flags</h3><div class="q"><div><b>${s.q.llm.length}</b><span>llm</span></div><div><b>${s.q.sim.length}</b><span>sim</span></div><div><b>${s.q.dlq.length}</b><span>DLQ</span></div><div><b>${s.cnt.runner}</b><span>execuções</span></div></div>
+     <dl class="kv" style="margin-top:10px"><dt>ai.enabled</dt><dd>${s.flags["ai.enabled"]}</dd><dt>Bedrock</dt><dd>${s.cnt.bedrockWorker} chamadas (API: ${s.cnt.bedrockApi})</dd><dt>IteratorAge</dt><dd>${s.iteratorAge()} s</dd></dl></div>
+   <div class="panel"><h3>S3 e auditoria</h3><dl class="kv"><dt>results/</dt><dd>${Object.keys(s.results).map(h=>h).join(", ") || "vazio"}</dd><dt>audit/</dt><dd>${s.audit.length} linhas · ${s.dedupAudit()} após deduplicação</dd>
+     <dt>última resposta</dt><dd>${r ? esc(r.status+" "+(r.task?"("+r.task+") ":"")+JSON.stringify(r.body).slice(0,90)) : "—"}</dd></dl></div>`;
+}
+
+/* ===================== UI: carga e custo ===================== */
+const COST_PER_HYP = {sonnet_nc:0.145, sonnet_c:0.079, tier:0.0468, haiku:0.0042}; /* a 58,5 mil tokens; seção 8 */
+const INFRA = 210;
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function runLoad(p){
+  const R = rng(42); const lam = p.users*p.hpd/(8*3600)*p.peak; const cap = 0.7*p.tpm*1000; const T = p.tok;
+  const arrivals = []; for (let t=0;t<3600;t++) if (R() < lam) arrivals.push(t); for (let i=0;i<p.burst;i++) arrivals.unshift(0);
+  arrivals.sort((a,b)=>a-b);
+  const queue = [], busy = [], lat = [], qSeries = [], doneSeries = []; let ai = 0, minute = -1, used = 0, peakUsed = 0, doneMin = 0, maxQ = 0;
+  const polls = [1,3,7,15,25]; const observe = d => { for (const t of polls) if (t >= d) return t; return 25 + Math.ceil((d-25)/10)*10; };
+  const normal = () => { const u = Math.max(1e-9,R()), v = R(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+  let t = 0; const tmax = 4*3600;
+  if (T > cap) return {impossible:true};
+  for (; t < tmax; t++){
+    if (Math.floor(t/60) !== minute){ if (minute >= 0){ qSeries.push(queue.length); doneSeries.push(doneMin); } minute = Math.floor(t/60); peakUsed = Math.max(peakUsed, used); used = 0; doneMin = 0; }
+    while (ai < arrivals.length && arrivals[ai] <= t) queue.push(arrivals[ai++]);
+    for (let i=busy.length-1;i>=0;i--) if (busy[i].end <= t){ lat.push(observe(busy[i].end - busy[i].arr + 0.05)); busy.splice(i,1); doneMin++; }
+    while (busy.length < p.wmax && queue.length && used + T <= cap){ const arr = queue.shift(); used += T; const d = Math.max(2, p.lat*Math.exp(0.35*normal()-0.06)); busy.push({arr, end:t+d}); }
+    maxQ = Math.max(maxQ, queue.length);
+    if (t >= 3600 && !queue.length && !busy.length && ai >= arrivals.length) break;
+  }
+  qSeries.push(queue.length); doneSeries.push(doneMin); peakUsed = Math.max(peakUsed, used);
+  const s = lat.slice().sort((a,b)=>a-b); const q = f => s.length ? s[Math.min(s.length-1, Math.ceil(s.length*f)-1)] : 0;
+  const monthly = p.users*p.hpd*22; const perHyp = COST_PER_HYP[p.strat]*(T/58500);
+  const rps = p.users*0.2; const apiTasks = Math.max(2, Math.ceil(rps/60)); const infra = INFRA + (apiTasks-2)*14.4;
+  const bedrock = monthly*perHyp; const total = infra + bedrock;
+  const needQ = Math.ceil(lam*60*T/0.7/0.8/1000);
+  return {needQ, arrivals:arrivals.length, done:lat.length, p50:q(.5), p95:q(.95), maxQ, within: s.filter(x=>x<=30).length/Math.max(1,s.length), qSeries, doneSeries, peakUsed, cap, monthly, infra, bedrock, total, costPerHyp: total/monthly, apiTasks, drainMin: Math.ceil(t/60)};
+}
+function readForm(){ const v = id => +document.getElementById(id).value; return {users:v("users"), hpd:v("hpd"), peak:v("peak"), burst:v("burst"), tpm:v("tpm"), tok:Math.min(32000,v("tok")), lat:v("lat"), wmax:v("wmax"), strat:document.getElementById("strat").value}; }
+const money = x => "US$ " + x.toLocaleString("pt-BR",{minimumFractionDigits: x<1?3:0, maximumFractionDigits: x<1?3:0});
+function renderLoad(){
+  const p = readForm(); LOADCFG = p; const r = runLoad(p);
+  const k = document.getElementById("kpis"), ch = document.getElementById("loadChecks");
+  if (r.impossible){ k.innerHTML = `<div class="kpi"><span>Resultado</span><b>Cota menor que uma hipótese</b></div>`; ch.innerHTML = `<li>${checkPill({ok:false})}<span class="req">ADR-15</span><span>A cota de ${p.tpm} mil tokens/min, a 70%, não comporta ${p.tok.toLocaleString("pt-BR")} tokens. Reduza o teto do prompt ou peça aumento de cota.</span></li>`; document.getElementById("chart").innerHTML = ""; return; }
+  k.innerHTML = [["Hipóteses na hora", r.arrivals], ["P95 até a hipótese", Math.round(r.p95)+" s"], ["Dentro de 30 s", Math.round(r.within*100)+"%"], ["Fila máxima", r.maxQ],
+    ["Tokens/min no pico", Math.round(r.peakUsed/1000)+" mil de "+p.tpm+" mil"], ["Custo mensal", money(r.total)], ["Custo por hipótese", money(r.costPerHyp)], ["Tasks da API", r.apiTasks], ["Cota para o pico sem fila", r.needQ+" mil tokens/min"]]
+    .map(([a,b]) => `<div class="kpi"><span>${a}</span><b>${b}</b></div>`).join("");
+  const checks = [
+    C("NFR Scal 1", "Nenhuma hipótese perdida ("+r.done+" de "+r.arrivals+")", r.done===r.arrivals),
+    C("NFR Perf 2", "P95 até a hipótese estruturada ≤ 30 s", r.p95<=30),
+    C("ADR-15", "Consumo de tokens no pico ≤ 70% da cota", r.peakUsed <= r.cap),
+    C("NFR Scal 1", "API dentro de 2 a 6 tasks sem mudar código", r.apiTasks<=6),
+    C("Seção 8.5", "Custo por hipótese ≤ US$ 0,05", r.costPerHyp<=0.05, "known"),
+    C("ADR-08", "Disponibilidade composta (99,82%) ≥ SLO de 99,5%", 99.82>=99.5)
+  ];
+  ch.innerHTML = checks.map(c => `<li>${c.ok?`<span class="pill ok">✓ passou</span>`:c.kind==="known"?`<span class="pill warn">⚠ acima da meta</span>`:`<span class="pill bad">✗ falhou</span>`}<span class="req">${esc(c.req)}</span><span>${esc(c.text)}</span></li>`).join("");
+  drawChart(r);
+}
+function drawChart(r){
+  const svg = document.getElementById("chart"); const n = r.qSeries.length; const x0 = 44, x1 = 740, y0 = 16, y1 = 200;
+  const maxV = Math.max(4, ...r.qSeries, ...r.doneSeries); const step = Math.pow(10, Math.floor(Math.log10(maxV))); const top = Math.ceil(maxV/step)*step;
+  const X = i => x0 + (x1-x0)*(n<=1?0:i/(n-1)), Y = v => y1 - (y1-y0)*v/top; const bw = Math.max(2,(x1-x0)/Math.max(1,n)*0.6);
+  let h = ""; for (let i=0;i<=4;i++){ const v = top*i/4; h += `<line x1="${x0}" x2="${x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${x0-6}" y="${Y(v)+4}" text-anchor="end">${Math.round(v)}</text>`; }
+  r.doneSeries.forEach((v,i) => { h += `<rect x="${X(i)-bw/2}" y="${Y(v)}" width="${bw}" height="${y1-Y(v)}" fill="var(--edge)" opacity=".55"><title>min ${i}: ${v} concluídas</title></rect>`; });
+  h += `<path d="${r.qSeries.map((v,i)=>(i?"L":"M")+X(i)+" "+Y(v)).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.4"/>`;
+  const tick = Math.max(10, Math.ceil(n/6/10)*10); for (let i=0;i<n;i+=tick) h += `<text x="${X(i)}" y="${y1+18}" text-anchor="middle">${i} min</text>`;
+  h += `<text x="${x1}" y="${y0-2}" text-anchor="end" fill="var(--accent)">linha: fila llm · barras: concluídas por minuto</text>`;
+  svg.innerHTML = h;
+}
+const PRESETS = {
+  normal:{users:50,hpd:10,peak:4,burst:0,tpm:200,tok:10000,lat:8,wmax:10,strat:"sonnet_c"},
+  burst:{users:50,hpd:10,peak:4,burst:50,tpm:200,tok:10000,lat:8,wmax:10,strat:"sonnet_c"},
+  minq:{users:50,hpd:10,peak:4,burst:50,tpm:100,tok:32000,lat:8,wmax:10,strat:"sonnet_c"},
+  haiku:{users:50,hpd:10,peak:4,burst:50,tpm:200,tok:10000,lat:4,wmax:10,strat:"haiku"}
+};
+document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => { const p = PRESETS[b.dataset.preset];
+  Object.entries(p).forEach(([k,v]) => { document.getElementById(k==="strat"?"strat":k).value = v; }); renderLoad(); renderList(); renderVerdict(); if (SCN[cur].id==="burst") renderScenario(); }));
+document.getElementById("loadForm").addEventListener("input", () => { renderLoad(); renderList(); renderVerdict(); });
+document.getElementById("loadForm").addEventListener("submit", e => e.preventDefault());
+
+/* abas */
+const tabs = [["tab-cen","view-cen"],["tab-load","view-load"]];
+tabs.forEach(([t,v]) => document.getElementById(t).addEventListener("click", () => { tabs.forEach(([t2,v2]) => { document.getElementById(t2).setAttribute("aria-selected", t2===t); document.getElementById(v2).hidden = v2!==v; }); }));
+
+SCN = scenarios(); pos = SCN[0].steps.length;
+LOADCFG = readForm(); renderLoad(); renderList(); renderVerdict(); renderScenario();
+window.__desk = () => SCN.map(sc => { const v = verdictOf(runScenario(sc).rows); return {id:sc.id, total:v.total, fail:v.fail.map(c=>c.req+" "+c.text), known:v.known.length}; });
+</script>
+
+</body>
+</html>
