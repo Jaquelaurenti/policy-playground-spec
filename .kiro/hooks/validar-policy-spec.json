@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Validar Policy Spec ao salvar",
+      "description": "Roda o validador (design §7.1, R16.2) sempre que o agente salva o Policy Spec, o arquivo de extensions ou o dataset. Erro bloqueante aparece para o agente corrigir.",
+      "trigger": "PostFileSave",
+      "matcher": "fixtures/.*\\.json$",
+      "action": {
+        "type": "command",
+        "command": "python3 tools/policy_spec/validate.py {{filePath}}"
+      },
+      "timeout": 30
+    }
+  ]
+}
