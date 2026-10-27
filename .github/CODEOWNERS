@@ -1,0 +1,12 @@
+# Quem revisa cada parte do repositório (GitHub pede review automaticamente).
+
+*                          @jspansini
+.kiro/specs/               @jspansini @Jaquelaurenti
+.kiro/steering/            @Jaquelaurenti @crisnaraa
+.kiro/settings/            @jspansini @Jaquelaurenti
+.kiro/hooks/               @jacquelinemarinho @jspansini
+.kiro/skills/              @crisnaraa @jacquelinemarinho
+tools/                     @jacquelinemarinho @jspansini
+tests/                     @jacquelinemarinho @jspansini
+arquitetura/               @Jaquelaurenti
+.github/                   @jspansini
