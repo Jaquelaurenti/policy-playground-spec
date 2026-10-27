@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Rodar testes ao salvar código",
+      "description": "Roda a suíte de testes sempre que o agente salva um arquivo Python em tools/ ou tests/.",
+      "trigger": "PostFileSave",
+      "matcher": "(tools|tests)/.*\\.py$",
+      "action": {
+        "type": "command",
+        "command": "python3 -m unittest discover -s tests -v"
+      },
+      "timeout": 60
+    }
+  ]
+}

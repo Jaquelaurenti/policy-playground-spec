@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Conferir cobertura R1–R16 ao editar a spec",
+      "description": "Quando o agente altera requirements.md, design.md ou tasks.md, confere se todo requisito continua coberto no design e nas tasks e se nenhuma decisão contradiz os ADRs da arquitetura.",
+      "trigger": "PostFileSave",
+      "matcher": "\\.kiro/specs/policy-playground/(requirements|design|tasks)\\.md$",
+      "action": {
+        "type": "agent",
+        "prompt": "O arquivo {{filePath}} acabou de ser alterado. Confira a rastreabilidade da spec: (1) todo requisito R1 a R16 e toda NFR de requirements.md aparece na matriz de cobertura do design (§14.1) e na tabela de cobertura de tasks.md; (2) nenhuma mudança contradiz os ADRs em arquitetura/arquitetura-da-aplicacao.md (seção 10). Responda com uma tabela curta: requisito, onde está coberto, status. Liste só o que estiver faltando ou inconsistente. Não altere nenhum arquivo."
+      },
+      "timeout": 120
+    }
+  ]
+}
