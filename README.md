@@ -2,7 +2,7 @@
 
 Entrega documental do **Policy Playground** para o hackathon (AWS Builders League). Este repositório contém a especificação técnica do projeto seguindo o fluxo de Spec-Driven Development do Kiro: **Requirements → Design → Tasks**.
 
-> **Entrega documental.** Esta entrega é a especificação. Ela **não** inclui código funcional nem as Tasks implementadas — as Tasks são um plano de implementação, não evidência de que o produto já foi construído.
+> **Especificação + MVP de demonstração.** Além do spec, o repositório traz um MVP funcional sobre o fixture **sintético** (`app/`), com o `SimulatedRunner`: todo número exibido leva o selo SIMULADO e não é impacto real. Os condicionais C1–C5 (runner real, PR real etc.) não estão implementados.
 
 ## O que é o Policy Playground
 
@@ -29,12 +29,53 @@ Princípio central do produto:
 │               ├── policy-playground-demo-extensions.json  ← metadados do Playground
 │               ├── policy-playground-demo-dataset.json     ← propostas sintéticas
 │               └── policy-playground-demo-policy-README.md
+├── app/
+│   ├── backend/                        ← domínio, motor determinístico, API (FastAPI) e testes
+│   ├── frontend/                       ← React 18 + Vite: DAG, hipóteses, achados, decisões, auditoria
+│   └── Dockerfile                      ← mesma imagem local e na Lambda
+├── infra/                              ← CDK (Python): perfil demo de custo zero (ADR-19)
+├── scripts/                            ← bootstrap no CloudShell e criação de usuários da demo
+├── .github/workflows/                  ← CI, deploy e destroy via OIDC
 ├── docs/
 │   └── working-backwards.md            ← PR/FAQ de origem (contexto de negócio)
 └── README.md
 ```
 
 Os três artefatos ficam em `.kiro/specs/policy-playground/`, que é o caminho em que o Kiro procura specs. Ao abrir o repositório no Kiro, o spec aparece no painel **Specs** e cada item de `tasks.md` pode ser iniciado pela ação _Start task_.
+
+## Rodar a demo
+
+### Local (sem AWS)
+
+```bash
+cd app/frontend && npm ci && npm run build && cd ../backend
+pip install -r requirements.txt
+python -m uvicorn policy_playground.api.app:app --port 8000
+```
+
+Abra http://localhost:8000. O seletor no topo troca o perfil (Policy Specialist, Risk Approver, Data Analyst, Viewer). Tudo fica em memória, sem modelo de IA: as sugestões vêm só dos geradores determinísticos G1 e G2. Para desenvolver o front com recarga automática, rode `npm run dev` em `app/frontend` com o backend ligado.
+
+Testes: `python -m unittest discover -s tests` na raiz (validador do Policy Spec) e em `app/backend` (domínio, API e adaptadores AWS com `moto`; instale `requirements-dev.txt`).
+
+### Na AWS, com custo zero (ADR-19)
+
+Sem chave de acesso em lugar nenhum: o GitHub Actions assume um papel da conta via OIDC.
+
+1. **CloudShell** (console da AWS, ícone `>_`), uma vez por conta:
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/Jaquelaurenti/policy-playground-spec/main/scripts/cloudshell-bootstrap.sh
+   bash cloudshell-bootstrap.sh Jaquelaurenti/policy-playground-spec us-east-1
+   ```
+2. **GitHub** → Settings → Secrets and variables → Actions → *Variables*: crie `AWS_ROLE_ARN` (o script imprime o valor), `AWS_REGION` e `ALERT_EMAIL`. `PP_MODEL_ID=us.amazon.nova-lite-v1:0` é opcional (habilite o modelo no console do Bedrock antes).
+3. **Actions → Deploy demo (AWS) → Run workflow.** O resumo da execução mostra a URL.
+4. **Usuários**, de novo no CloudShell (a senha temporária vai direto para o e-mail da pessoa):
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/Jaquelaurenti/policy-playground-spec/main/scripts/create-demo-user.sh
+   bash create-demo-user.sh pessoa@exemplo.com policy-specialist
+   ```
+5. Ao terminar: **Actions → Destroy demo (AWS)** com a confirmação `destruir`.
+
+Confira em Billing → Credits se os créditos cobrem os serviços usados e acompanhe os alertas de orçamento (US$ 1 e US$ 5).
 
 ## Os três artefatos
 

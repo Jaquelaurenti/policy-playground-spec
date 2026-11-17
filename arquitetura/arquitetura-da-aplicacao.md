@@ -428,7 +428,7 @@ Em modo compliance, a retenção não pode ser reduzida depois de aplicada, ent�
 
 ## 10. Decisões e próximos passos
 
-Dezoito decisões fecham esta arquitetura; seis delas foram tomadas com o time em 20/10. Nenhuma contradiz as respostas da inception (D-Q1 a D-DQ4), mas quatro revisam alternativas que o §17 do design tinha descartado: SQS, Step Functions, workers separados e o EventBridge como roteador.
+Dezenove decisões fecham esta arquitetura; seis delas foram tomadas com o time em 20/10. Nenhuma contradiz as respostas da inception (D-Q1 a D-DQ4), mas quatro revisam alternativas que o §17 do design tinha descartado: SQS, Step Functions, workers separados e o EventBridge como roteador.
 
 | ADR | Decisão | Motivo principal | Revisa no design.md |
 | --- | --- | --- | --- |
@@ -450,6 +450,7 @@ Dezoito decisões fecham esta arquitetura; seis delas foram tomadas com o time e
 | ADR-16 | Retenção e bloqueio da auditoria por ambiente no CDK: compliance e anos em produção, governance e prazo parametrizável em estudos | Exigência da governança sem encarecer os estudos | §12 |
 | ADR-17 | MVP sintético: o `SimulatedRunner` usa só o fixture; o `Motivo de Decisão` (tabela DynamoDB existente, só leitura) é lido apenas pelo runner real do C1 | Sem o critério da OQ-6, uma comparação real não pode ser exibida como impacto | §9.1, §9.3 |
 | ADR-18 | PR real (C3) aberto por uma Lambda fora da VPC, acionada por `ChangeArtifactSelected`, com token no Secrets Manager | A VPC continua sem rota para a internet; custo de centavos | §9.2 |
+| ADR-19 | Perfil demo de custo zero: a mesma imagem e o mesmo domínio rodando em Lambda, HTTP API, DynamoDB on-demand e S3, sem VPC | Demo funcional coberta por free tier e créditos, sem custo fixo por hora | — (só o ambiente de demo; ver §10.3) |
 
 A documentação do Bedrock não lista os modelos Claude com inference profile partindo de sa-east-1. A verificação é `aws bedrock list-inference-profiles --region sa-east-1`, seguida de `get-inference-profile` para ver as regiões de destino ([AWS](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html)).
 
@@ -474,6 +475,32 @@ Continuam em aberto: o número exato da cota mínima na conta, os anos de reten�
 - [ ] Montar o eval de modelos sobre o fixture, já com o teto de 30 mil tokens de entrada.
 - [ ] Criar os perfis do AppConfig com validador JSON Schema e os padrões da seção 9.2.
 - [ ] Fechar a estimativa na AWS Pricing Calculator.
+- [x] Subir a demo funcional no perfil de custo zero (ADR-19, §10.3).
+
+### 10.3 ADR-19: perfil demo de custo zero
+
+**Contexto.** O time precisa de uma demo funcional na AWS paga só com os créditos da conta. A arquitetura-alvo tem custo fixo por hora (ALB, endpoints de interface em 2 AZs, Fargate, WAF, KMS CMK) que consome créditos mesmo sem uso. A demo usa só o fixture sintético, então nenhum controle de dado real é necessário.
+
+**Decisão.** O código é o mesmo (`app/backend`); muda só a borda e a infraestrutura, por variáveis de ambiente e pelo stack `infra/`:
+
+| Alvo (produção) | Perfil demo | O que se preserva |
+| --- | --- | --- |
+| ECS Fargate + ALB + VPC endpoints (ADR-01, ADR-07) | Uma Lambda com a mesma imagem, via Lambda Web Adapter | Monólito modular, uma imagem |
+| SQS + workers (ADR-02, ADR-03) | A Lambda se auto-invoca em modo `Event`; jobs com chave de idempotência e sem retentativa automática | Contrato assíncrono e idempotente |
+| `pp-events` + `pp-state` (ADR-04) | Uma tabela DynamoDB on-demand com escrita condicional por `seq` | Eventos só de acréscimo; concorrência otimista |
+| Auditoria em S3 Object Lock com KMS CMK (ADR-16) | Bucket versionado com SSE-S3; a Lambda só tem `s3:PutObject` em `events/*` | Trilha só de escrita para a aplicação |
+| Entra ID via OIDC (ADR-09) | Cognito, com grupos iguais aos papéis | Mesmo autorizador JWT no API Gateway |
+| Claude no Bedrock (ADR-10) | Amazon Nova Lite (`PP_MODEL_ID`) ou nenhum modelo | IA só sugere, sem números; G1/G2 funcionam sem modelo |
+| WAF + throttling por usuário | Throttling no estágio do HTTP API (10 req/s, rajada de 20) | Limite de abuso |
+| Budgets em modo econômico (ADR-11) | Alertas em US$ 1 (20%) e no teto de US$ 5, real e previsto | Custo visível antes da fatura |
+
+**Por que a Amazon Nova.** Créditos promocionais costumam não cobrir modelos de terceiros vendidos pelo Marketplace, como os da Anthropic. A Nova é da própria AWS. Confira em Billing → Credits antes de ligar `PP_MODEL_ID`. Sem a variável, a demo roda sem modelo e mostra só as sugestões determinísticas.
+
+**Custo esperado.** Todo componente é cobrado por uso: Lambda, HTTP API, DynamoDB, S3, CloudFront e Cognito ficam dentro do free tier no volume de uma demo. Os gastos residuais são o armazenamento do bootstrap do CDK (bucket e repositório ECR, centavos) e, se ligado, o Bedrock (centavos por dezenas de chamadas). O pipeline `destroy` remove o stack inteiro.
+
+**Consequências.** Sem VPC, a Lambda acessa os serviços por endpoints públicos com TLS e IAM. É aceitável aqui porque só há dados sintéticos, e invalida o perfil para qualquer dado real. Não há Object Lock nem retenção em modo compliance. A primeira chamada após inatividade tem partida a frio de alguns segundos. Nenhum desses atalhos vai para produção: o perfil existe só no stack `infra/`, e o código de domínio é o mesmo.
+
+**Como subir.** Ver "Rodar a demo" no README.
 
 ## 11. Rastreabilidade com o SDD
 
