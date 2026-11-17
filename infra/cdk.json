@@ -1,0 +1,9 @@
+{
+  "app": "python3 app.py",
+  "context": {
+    "stackName": "PolicyPlaygroundDemo",
+    "alertEmail": "",
+    "modelId": "",
+    "budgetUsd": 5
+  }
+}

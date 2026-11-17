@@ -1,0 +1,42 @@
+name: Deploy demo (AWS)
+# Publica o perfil demo de custo zero (ADR-19). Sem chaves no repositório: a Action assume,
+# via OIDC, o papel criado por scripts/cloudshell-bootstrap.sh.
+# Variáveis do repositório (Settings → Secrets and variables → Actions → Variables):
+#   AWS_ROLE_ARN (obrigatória), AWS_REGION (padrão us-east-1), ALERT_EMAIL, PP_MODEL_ID (opcional)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["app/**", "infra/**", ".kiro/specs/policy-playground/fixtures/**", ".github/workflows/deploy.yml"]
+permissions:
+  id-token: write
+  contents: read
+concurrency: { group: deploy-demo, cancel-in-progress: false }
+jobs:
+  deploy:
+    if: vars.AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: app/frontend/package-lock.json }
+      - name: Build do front-end
+        working-directory: app/frontend
+        run: npm ci && npm run build
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r infra/requirements.txt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: cdk deploy
+        working-directory: infra
+        run: |
+          npx --yes aws-cdk@2.173.4 deploy --require-approval never --outputs-file outputs.json \
+            -c alertEmail="${{ vars.ALERT_EMAIL }}" -c modelId="${{ vars.PP_MODEL_ID }}"
+          echo "### Demo publicada" >> "$GITHUB_STEP_SUMMARY"
+          python -c "import json;o=list(json.load(open('outputs.json')).values())[0];print('- URL:',o['Url']);print('- User pool:',o['UserPoolId'])" >> "$GITHUB_STEP_SUMMARY"

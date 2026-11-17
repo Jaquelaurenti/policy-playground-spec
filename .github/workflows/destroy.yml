@@ -1,0 +1,27 @@
+name: Destroy demo (AWS)
+# Remove tudo o que o deploy criou (tabela, buckets, Cognito, CloudFront, Lambda). Irreversível.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Digite "destruir" para confirmar'
+        required: true
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  destroy:
+    if: inputs.confirm == 'destruir' && vars.AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r infra/requirements.txt && mkdir -p app/frontend/dist
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - working-directory: infra
+        run: npx --yes aws-cdk@2.173.4 destroy --force
