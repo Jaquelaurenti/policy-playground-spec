@@ -1,0 +1,34 @@
+"""Portas do monólito modular. O domínio não importa boto3 nem FastAPI (tech.md)."""
+from __future__ import annotations
+
+from typing import Protocol
+
+
+class EventStore(Protocol):
+    def append(self, stream: str, event: dict) -> dict: ...
+    def list(self, stream: str) -> list[dict]: ...
+    def index(self, stream: str, summary: dict) -> None: ...
+    def streams(self) -> list[dict]: ...
+
+
+class KeyValue(Protocol):
+    def get(self, key: str) -> dict | None: ...
+    def put(self, key: str, value: dict) -> None: ...
+    def put_if_absent(self, key: str, value: dict) -> bool: ...
+
+
+class AuditSink(Protocol):
+    def write(self, event: dict) -> None: ...
+
+
+class ModelPort(Protocol):
+    name: str
+    def suggest(self, context: dict, cap: int) -> tuple[list[dict], int]: ...
+
+
+class ModelUnavailable(Exception):
+    pass
+
+
+class Dispatcher(Protocol):
+    def dispatch(self, job: dict) -> None: ...
