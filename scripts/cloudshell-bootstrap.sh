@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Rode UMA vez no AWS CloudShell da conta que vai hospedar a demo (console → ícone >_ no topo).
-# Cria: (1) o provedor OIDC do GitHub, (2) um papel que SÓ a branch main deste repositório pode assumir,
+# Serve para qualquer conta e qualquer fork: passe o SEU <dono/repo> e a SUA região.
+# Cria: (1) o provedor OIDC do GitHub, (2) um papel que SÓ a branch main desse repositório pode assumir,
 # com permissão apenas para assumir os papéis do CDK, e (3) o bootstrap do CDK na região.
 # Nenhuma chave de acesso é criada nem sai da conta.
 #
@@ -21,11 +22,26 @@ if ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC"
   echo "Provedor OIDC do GitHub criado."
 fi
 
+# O GitHub pode emitir o "sub" do token em dois formatos: o clássico (repo:dono/repo:...) e o
+# imutável, com os IDs numéricos (repo:dono@ID/repo@ID:...). Aceitamos os dois, senão o deploy
+# falha com "Not authorized to perform sts:AssumeRoleWithWebIdentity".
+SUBS="\"repo:${REPO}:ref:refs/heads/main\",\"repo:${REPO}:environment:demo\""
+IDS="$(curl -fsSL "https://api.github.com/repos/${REPO}" 2>/dev/null \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["owner"]["login"], d["owner"]["id"], d["name"], d["id"])' 2>/dev/null || true)"
+if [ -n "$IDS" ]; then
+  read -r OWNER OWNER_ID NAME REPO_ID <<<"$IDS"
+  IMM="repo:${OWNER}@${OWNER_ID}/${NAME}@${REPO_ID}"
+  SUBS="${SUBS},\"${IMM}:ref:refs/heads/main\",\"${IMM}:environment:demo\""
+else
+  echo "Aviso: não consegui ler os IDs do repositório na API do GitHub (repositório privado?)."
+  echo "       Se o deploy falhar ao assumir o papel, rode de novo com o repositório público ou ajuste a confiança."
+fi
+
 cat > /tmp/trust.json <<JSON
 {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Federated":"${OIDC}"},
  "Action":"sts:AssumeRoleWithWebIdentity",
  "Condition":{"StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},
-  "StringLike":{"token.actions.githubusercontent.com:sub":["repo:${REPO}:ref:refs/heads/main","repo:${REPO}:environment:demo"]}}}]}
+  "StringLike":{"token.actions.githubusercontent.com:sub":[${SUBS}]}}}]}
 JSON
 cat > /tmp/policy.json <<JSON
 {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sts:AssumeRole",
@@ -42,7 +58,7 @@ aws iam put-role-policy --role-name "$ROLE" --policy-name assume-cdk-roles --pol
 npx --yes aws-cdk@2.173.4 bootstrap "aws://${ACCOUNT}/${REGION}" --tags project=policy-playground --tags environment=demo
 
 echo
-echo "Pronto. No GitHub: Settings → Secrets and variables → Actions → Variables, crie:"
+echo "Pronto. No GitHub de ${REPO}: Settings → Secrets and variables → Actions → aba Variables, crie:"
 echo "  AWS_ROLE_ARN = arn:aws:iam::${ACCOUNT}:role/${ROLE}"
 echo "  AWS_REGION   = ${REGION}"
 echo "  ALERT_EMAIL  = <e-mail para alertas de orçamento>"
