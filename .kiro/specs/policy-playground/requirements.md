@@ -198,7 +198,7 @@ Throughout this document, "the Playground" is the system under specification.
 6. WHEN the Playground ranks suggestions THEN it SHALL take into account the relevance assessments previously recorded under criterion 4, so that the specialist's feedback influences which suggestions are shown first.
 
 - **Priority**: Medium
-- **Scope note**: The MVP requires a bounded, human-reviewed set of suggestions. It does not require a sophisticated autonomous red-team system or complex configurable investigation limits. Criteria 5 and 6 make discovery reach beyond the changed path (the Working Backwards "o que ninguém perguntou" problem) and make feedback useful for prioritization, as promised in the Working Backwards FAQ, without adding an autonomous loop.
+- **Scope note**: The MVP requires a bounded, human-reviewed set of suggestions. It does not require a sophisticated autonomous red-team system or complex configurable investigation limits. Criteria 5 and 6 make discovery reach beyond the changed path (the Working Backwards "o que ninguém perguntou" problem) and make feedback useful for prioritization, as promised in the Working Backwards FAQ, without adding an autonomous loop. **Revised in 1.3:** a bounded investigation agent over deterministic tools is now in scope (Requirement 17).
 - **Dependencies**: Known concern — excessive/low-value findings.
 
 ### Requirement 9: Turning a finding into an investigable scenario
@@ -321,6 +321,28 @@ Throughout this document, "the Playground" is the system under specification.
 - **Scope note**: Consuming and validating the Policy Spec is in scope; producing/consolidating it is explicitly out of scope for the MVP. This requirement does not fix the JSON schema, representation, or execution mechanism — those belong to Design.
 - **Dependencies**: Requirements 1, 5. Open Question OQ-2, OQ-15. `[Feasibility: Design]` for the Policy Spec's structure, validation, and how it feeds dependency discovery and execution.
 
+### Requirement 17: Autonomous investigation agent over deterministic tools
+
+**User Story:** As a credit policy specialist, after I confirm a scenario I want an agent to investigate on its own the effects I did not ask about, using the Playground's deterministic capabilities as tools, so that I receive findings already backed by simulated evidence instead of loose suggestions I still have to test one by one.
+
+#### Acceptance Criteria
+
+1. WHEN a specialist confirms a scenario and requests an investigation THEN the Playground SHALL run an investigation agent that plans and executes a sequence of tool calls without further human input, until it concludes or reaches a configured limit.
+2. THE agent SHALL act only through a closed set of tools that wrap existing deterministic capabilities: read the policy, preview the affected sub-DAG, trace the rules behind an output, run a scenario, compare executions, obtain deterministic candidates (G1/G2), read the investigation audit trail, and register a finding. No tool SHALL modify the Policy Spec, the baseline, or any decision.
+3. WHEN the agent investigates THEN it SHALL first state a short plan, SHALL be able to choose among alternatives, including at least one variation of the confirmed scenario compared with it (sensitivity), and SHALL receive tool errors, including `cannot_calculate`, as recoverable results so that it can try an alternative.
+4. WHEN the agent registers a finding THEN the finding SHALL reference an execution produced by the run-simulation tool in the same investigation, and IF the finding text contains a number that is not present in that execution's result THEN the Playground SHALL reject the finding and return the reason to the agent.
+5. THE Playground SHALL bound each investigation by a maximum number of agent steps, a maximum number of simulations, and the session token cap, and SHALL end the investigation in an explicit limited state when a bound is reached.
+6. THE same tools SHALL be exposed through a Model Context Protocol (MCP) server, generated from the same tool registry used by the agent, so that the agent and external MCP clients (for example, the Kiro IDE) use identical contracts.
+7. WHEN the agent calls a tool THEN the Playground SHALL append an audit event with the tool name, input, outcome status, and any error, so that the specialist can see the agent's path step by step (Requirement 14).
+8. IF the model is unavailable THEN the Playground SHALL fall back to the deterministic candidates (Requirement 8.5) and SHALL inform the specialist that the agent did not run.
+9. WHEN the agent concludes THEN it SHALL deliver a short recommendation in text; IF the recommendation cites a number that is not present in the investigation's executions THEN the Playground SHALL ask the agent once to rewrite it and, if it still does, SHALL omit the recommendation.
+10. THE agent SHALL act with the permissions of the person who triggered it: only roles allowed to run scenarios (Policy Specialist) can start an investigation or have the agent run scenarios and register findings; read-only roles can only read through the tools (Requirement 15).
+11. Agent findings SHALL be born `investigationState=suggested` with `evidenceLevel=simulated` derived from the referenced execution, and SHALL follow the same human review and decision path as any other finding (Requirements 8–10). The agent SHALL NOT accept, reject, or decide.
+
+- **Priority**: High
+- **Scope note**: This requirement revises the R8 scope note: the MVP now includes a bounded autonomous loop, limited to read-only and simulation tools over the synthetic dataset (`SimulatedRunner`). Human control stays at the two gates that matter: confirming the scenario before anything runs, and deciding on the evidence. Real execution (C1), code generation (C2) and pull requests (C3) remain out of the agent's tool set.
+- **Dependencies**: Requirements 5, 7, 8, 10, 14, 15. Decision Log D-17.
+
 ## Non-Functional Requirements
 
 These are stated as observable expectations. Concrete thresholds are open questions, not invented here.
@@ -425,6 +447,7 @@ Decisions already made by the team in the inception questionnaires and incorpora
 | D-Q9 | Audit storage | S3 as append-only audit data lake (Parquet/JSON) | R14.5 (resolves OQ-10) |
 | D-DQ3 | Expected concurrency | 10–50 concurrent users | NFR Scalability 1 |
 | D-DQ4 | How results reach the user | Polling of an execution status | NFR Performance 1 |
+| D-17 | Should the AI investigate autonomously after the scenario is confirmed? | Yes, as a bounded agent using only read and simulation tools, with findings bound to executions and exposed via MCP | R17; revises the R8 scope note |
 
 Answers that were **not** adopted, with the reason, are recorded in Design §17.
 
@@ -494,3 +517,4 @@ The design must preserve the separation between functional requirements and impl
 | 1.2 | R15.4–15.6: corporate identity federation, anonymized/synthetic data in an isolated environment, minimum role set. | Team decisions D-Q5 and D-Q6. |
 | 1.2 | NFR additions: 30 s P95 for hypothesis structuring, Scalability section (10–50 users, stateless backend, isolated execution), FinOps defaults and result reuse, reliability under model outage and idempotent retries. | Robustness and scale requirements were implicit; they are now testable. |
 | 1.2 | OQ-18 wording: the provisional policy-area mapping lives in a complementary extensions file, not inside the Policy Spec. | R16.3: the Playground consumes the Policy Spec and must not alter it. |
+| 1.3 | Requirement 17 added: autonomous investigation agent over deterministic tools, exposed via MCP; R8 scope note revised; Decision Log D-17. | The hackathon requires an agentic component; the agent investigates within the existing human gates and never produces numbers of its own. |

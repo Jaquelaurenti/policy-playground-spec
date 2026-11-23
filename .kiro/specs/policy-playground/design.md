@@ -468,7 +468,7 @@ stateDiagram-v2
 
 ### 10.2 Invariantes da investigação assistida por IA
 
-- **Bounded by design (R8.2):** the investigation module returns at most *N* suggestions per request (N a configurable session cap, default small), ranked; no unbounded stream. No autonomous red-team loop (R8 scope note). Deterministic candidates (§10.3) and model suggestions share the same cap and the same ranking.
+- **Bounded by design (R8.2):** the investigation module returns at most *N* suggestions per request (N a configurable session cap, default small), ranked; no unbounded stream. No autonomous red-team loop (R8 scope note). *Revisado em 1.3:* o Agente Investigador (§10.4) é um loop limitado, só com tools de leitura e simulação, e seus achados entram no mesmo cap e ranking. Deterministic candidates (§10.3) and model suggestions share the same cap and the same ranking.
 - **Two orthogonal axes, never collapsed into one "proven" flag:**
   - **`investigationState`** — process state per §10.1.
   - **`evidenceLevel`** — how strong the backing is: `none` (AI suggestion only), `simulated` (a `SimulatedRunner` result over synthetic data), or `study_validated` (a real `RealStudyRunner` result **that also passed validation** — see §9.3). This is an *evidence* fact, derived only from a deterministic execution's `status`+`mode`.
@@ -509,6 +509,63 @@ relevance(policy, kind) = (relevant + 1) / (assessed + 2)
 where `kind` is the generator (`G1`, `G2`) or `ai_suggestion`, and the counts come from the assessments recorded under R8.4 for that policy. The `+1/+2` smoothing makes an unassessed kind start at 0.5. Weights are configuration (defaults `w_struct = 0.6`, `w_fb = 0.4`, tunable under OQ-7). The cap *N* of §10.2 is applied after ranking.
 
 ---
+
+### 10.4 Agente Investigador: loop limitado sobre tools determinísticas (R17, D-17)
+
+**Ideia central.** O motor determinístico vira o conjunto de ferramentas do agente. O agente decide *o que* investigar e *em que ordem*; os números vêm só das execuções. Isso preserva "AI proposes. Deterministic execution proves. Humans decide." e dá autonomia real ao passo de investigação.
+
+```mermaid
+sequenceDiagram
+    actor E as Especialista
+    participant API as API (FastAPI)
+    participant J as Job "investigation" (Lambda assíncrona)
+    participant M as Bedrock Converse (toolConfig)
+    participant T as ToolRegistry
+    participant D as Motor determinístico
+    E->>API: confirma cenário + POST /investigations
+    API->>J: dispatch (self-invoke, idempotente)
+    loop até end_turn ou limite (passos, simulações, tokens)
+        J->>M: messages + toolSpecs
+        M-->>J: toolUse(name, input)
+        J->>T: call(name, input)
+        T->>D: affected_subdag / simulate / g1·g2 ...
+        D-->>T: resultado determinístico
+        T-->>J: toolResult (success | error recuperável)
+        J->>API: evento AgentToolCalled (append-only)
+    end
+    J->>API: FindingSuggested (evidenceLevel=simulated, executionId) + InvestigationCompleted
+    E->>API: revisa achados e decide (fluxo §11)
+```
+
+**Contratos das tools** (fonte única: `tool_registry.py`; gera o `toolSpec` da Converse e as tools do servidor MCP; nomes unificados na proposta do time):
+
+| Tool | Entrada | Saída | Função existente | Permissão |
+|---|---|---|---|---|
+| `get_policy` | `rule_ids?: string[]` | parâmetros, regras (inputs, outputs, dependsOn), ordem do DAG, `outputVars`, `mode=SIMULADO` | `PolicyModel` | leitura |
+| `preview_subdag` | `overrides: {Pxxx: number}` | `subDag`, `isResult=false` | `engine.affected_subdag` | leitura |
+| `trace_output` | `output_var: string` | regras que decidem a saída | `engine.required_for_output` | leitura |
+| `run_scenario` | `overrides: {Pxxx: number}` | `executionId`, resumo (`changedRecords` por saída) | `engine.simulate` (só `SimulatedRunner`) | Policy Specialist; consome orçamento |
+| `compare` | `execution_id`, `against_execution_id?` | execução x baseline (saídas, motivos, limites) ou execução x execução (registros que diferem, motivos lado a lado) | `engine.compare` | leitura |
+| `get_candidates` | `overrides`, `generators?: ["G1","G2"]` | candidatos determinísticos (título, `ruleRefs`) | `generators.g1_shared_input`, `g2_reachability` | leitura |
+| `read_audit` | — | chamadas desta investigação, execuções, achados desta e de investigações anteriores da hipótese | event store | leitura |
+| `register_finding` | `title`, `text`, `ruleRefs[]`, `executionIds[]` | `findingId`, `state=suggested` | `_emit("FindingSuggested")` | Policy Specialist |
+
+**Invariantes (testáveis, §14):**
+
+- **Números amarrados à evidência.** `register_finding` exige `executionIds` da mesma investigação; todo número do texto (fora ids `Rxxx`, `Pxxx`, `E-…`, `F-…`) precisa aparecer no resultado de uma delas. Caso contrário, a tool recusa e devolve o motivo ao agente, que corrige (R17.4). A recomendação final passa pelo mesmo teste contra todas as execuções: uma chance de reescrita e, se persistir, é omitida (R17.9).
+- **Plano visível.** O agente começa com "PLANO:"; todo texto entre chamadas entra na trilha como nota, e a UI mostra plano, ferramentas e resultado (R17.3, R17.7).
+- **Tools fechadas.** Só as oito acima; tool desconhecida, argumento fora do schema e `cannot_calculate` viram `toolResult status=error` e o agente tenta uma alternativa. Nenhuma tool escreve no Policy Spec, no baseline ou em decisões (R17.2).
+- **Permissões de quem acionou.** O registro recebe o `Actor` da requisição e aplica `ROLES_READ`/`ROLES_WRITE` em cada chamada; um Viewer lê, mas o agente não executa cenários nem registra achados em seu nome (R17.10, R15).
+- **Limites.** `max_steps` (padrão 12), `max_simulations` (padrão 6) e teto de tokens da investigação, além do limite atual de pedidos por hipótese. Atingir um limite encerra no estado `limited` (R17.5).
+- **Auditoria.** Cada chamada gera `AgentToolCalled {step, tool, input, status, error?}` no stream da hipótese (R17.7, R14).
+- **Degradação.** `ModelUnavailable` → os candidatos G1/G2 seguem pelo caminho atual de §10.3 e a UI informa que o agente não rodou (R17.8).
+- **Gates humanos inalterados.** O agente só roda depois do cenário confirmado (§5) e não decide (§11) (R17.11).
+
+**MCP (R17.6).** O mesmo registro é exposto por um servidor MCP (FastMCP, Streamable HTTP, `stateless_http=True`, `json_response=True`) montado em `/mcp` no app existente. Isso funciona atrás do Lambda Web Adapter porque cada requisição é independente. O Kiro se conecta ao mesmo endpoint (`.kiro/settings/mcp.json`). Compatibilidade verificada no spike: `mcp==1.9.4` com `fastapi==0.115.6`; o `mcp` 2.x exige Starlette 1.x e quebra o FastAPI fixado.
+
+**Implantação.** O job roda na mesma Lambda (self-invoke em modo Event, D-12). O `timeout` da função sobe de 29 s para 120 s: o HTTP API continua cortando requisições síncronas em 30 s, então só o job assíncrono usa o tempo extra. A permissão `bedrock:InvokeModel` existente cobre a Converse. Modelo padrão: Amazon Nova Lite (suporta tool use), configurado por `PP_MODEL_ID` (ADR-14).
+
+**Alternativas consideradas.** *Strands Agents / AgentCore Runtime* (citados na proposta do time): mais recursos, mas acrescentam dependência e custo ao perfil de custo zero (ADR-19) e risco de integração num sprint de 3 h; ficam como evolução. Decisão: Converse com `toolConfig`. *Agente sem MCP (só Converse):* atende a regra agêntica, mas não expõe as tools a clientes externos; o MCP sai do mesmo registro com custo baixo.
 
 ## 11. Evidências, findings e decisão humana
 
@@ -626,6 +683,7 @@ Three distinct columns: **Addressed** = the design has an architectural answer; 
 | R14 Traceability/audit | ✓ | ✓ persisted (DynamoDB) + append-only audit lake (S3) + reproducible executions | Object Lock optional |
 | R15 Governed data / privacy | ✓ | ◑ federation path designed; demo uses simplified groups; synthetic data only | real Azure AD connection depends on corporate approval |
 | R16 Consume+validate Policy Spec | ✓ | ✓ (fixture validated) | OQ-2/OQ-15 (real schema) |
+| R17 Investigation agent + MCP | ✓ (§10.4) | ◑ (spike validated; built in tasks 25–29) | Bedrock model access in the demo account |
 | NFR lead-time | ✓ (objective) | ◑ in-app hypothesis-to-evidence time + relevant-finding share (§12) | OQ-13 (end-to-end measurement) |
 | NFR usability (no code) | ✓ | ✓ | — |
 | NFR performance | ✓ | ✓ polling status; 30 s P95 for structuring | study execution time has no target |
@@ -635,7 +693,7 @@ Three distinct columns: **Addressed** = the design has an architectural answer; 
 
 Legend: ✓ fully, ◑ partial/with explicit limitation, n/a not exercised in MVP. No requirement is unaddressed. The ◑ rows are exactly the limitations stated in §9.2, §9.3, §12, §13 and §15 — this matrix consolidates them; it does not introduce new scope.
 
-- **Design validation gate:** every requirement R1–R16 + NFRs maps to at least one section here (consolidated in §14.1). A requirement with no architectural answer is a design gap to resolve before Tasks; R11/R12's real-PR/real-credit-policy platform portion is flagged as such in §9.2, §14.1 and §15.
+- **Design validation gate:** every requirement R1–R17 + NFRs maps to at least one section here (consolidated in §14.1). A requirement with no architectural answer is a design gap to resolve before Tasks; R11/R12's real-PR/real-credit-policy platform portion is flagged as such in §9.2, §14.1 and §15.
 
 ---
 
@@ -861,3 +919,4 @@ flowchart LR
 | 1.2 | §14 tests for audit, idempotency, decisions, scalability and degradation; §14.1 matrix updated. | New testable requirements. |
 | 1.2 | §17: alternatives from the team's inception exploration evaluated and not adopted, with reasons. | Keeps the MVP lean while recording why each option was left out. |
 | 1.2 | §6.1.1: Playground metadata moved to a complementary extensions file (`policy_source`, `stage_area`, `parameter_domains`, `datasets`); the Policy Spec fixture is back to its original content. §7.1 checks 6–8 validate the binding, domains and datasets. Supersedes the 1.1 `stages[].area` field. | R16.3: the Playground must not alter the upstream Policy Spec. Team decisions D-Q2, D-Q6. |
+| 1.3 | §10.4 Agente Investigador (unificado com a proposta do time): 8 tools determinísticas, plano visível, checagem da recomendação, permissões de quem acionou, loop limitado na Converse, números amarrados a execuções, auditoria por chamada, servidor MCP do mesmo registro; §10.2 revisado. | Requirements 1.3 R17, D-17. Validado por spike (`spike/agente/`). |

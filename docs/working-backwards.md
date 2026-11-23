@@ -93,7 +93,7 @@ O especialista usa uma única experiência, sem escolher entre modos. Ele testa 
 6. **Evidenciar:** o Playground mostra o impacto, as regras relacionadas, os dados usados e o contexto necessário para investigar o resultado.
 7. **Transformar a descoberta em cenário:** um finding da IA vira um novo cenário que pode ser explorado no próprio Playground.
 8. **Decidir:** o especialista aceita ou rejeita a hipótese e decide se a política deve mudar.
-9. **Implementar (evolução futura, fora do núcleo do MVP):** depois da aprovação, a solução gera código, testes e Pull Request para revisão. No hackathon, este passo aparece como demonstração: um artefato de mudança (diff + testes) rotulado e não submetido. O PR real depende de acesso aos repositórios SYN (ver R11/R12 e OQ-9 no `requirements.md`).
+9. **Implementar (evolução futura, fora do núcleo do MVP):** depois da aprovação, a solução gera código, testes e Pull Request para revisão. No hackathon, este passo aparece como demonstração: um artefato de mudança (diff + testes) rotulado e não submetido. O PR real depende de acesso aos repositórios da plataforma de políticas de crédito (ver R11/R12 e OQ-9 no `requirements.md`).
 
 **Exemplo**
 
