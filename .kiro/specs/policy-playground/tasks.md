@@ -274,6 +274,46 @@ Runs after the MVP core passes task 20. It changes where modules run, not what t
 
 ---
 
+### Phase 10: Investigation agent (R17, design §10.4) — hackathon sprint
+
+Five fronts, one owner each (four people: front 5 is shared). Tasks 25 and 26 are the critical path; 27 and 28 run in parallel from the contracts in design §10.4; 24.1 opens the sprint and 29 closes it. The disposable spike in `spike/agente/` is a reference only: it is not merged and the code is rewritten inside `app/backend/`.
+
+- [ ] 24.1 Deploy the current state in the first 20 minutes (front 4)
+  - Run **Deploy demo** with `PP_MODEL_ID` set; create the demo users; confirm the URL with the four roles; redeploy after each merge; **Destroy** only after the presentation
+  - _Requirements: NFR deployment; design §16, ADR-19_
+
+- [ ] 25. Implement the tool registry over the deterministic engine (front 1)
+  - `policy_playground/agent/tools.py`: the eight tools of design §10.4 with JSON Schemas; `ToolError` for recoverable errors, including `cannot_calculate`; per-call permission check with the triggering `Actor`; per-investigation simulation budget; evidence binding of `register_finding`
+  - Tests: each tool returns the same values as the engine function it wraps; unknown tool, unknown parameter, non-numeric value and `cannot_calculate` are recoverable errors; a Viewer can read but cannot run scenarios; a finding without an execution or with an unbound number is rejected; the baseline is unchanged after simulations
+  - _Requirements: R17.2–R17.5, R17.10; design §10.4_
+
+- [ ] 26. Implement the agent loop and the `investigation` job (front 1)
+  - `BedrockModel.investigate(...)` over the Converse API with `toolConfig`; plan notes; recommendation check with one rewrite; `Playground.request_investigation` (confirmed scenario required, Policy Specialist only, idempotent) and `run_investigation_job` on the existing dispatcher; events `InvestigationRequested`, `AgentToolCalled`, `FindingSuggested` (`source=agent`, `evidenceLevel=simulated`, `executionIds`), `InvestigationCompleted {status: done | limited | model_unavailable, steps, tokens, recommendation}`; fallback to G1/G2 on `ModelUnavailable`; route `POST /api/hypotheses/{hid}/investigations`
+  - Tests with a scripted stub client: the demo flow with sensitivity, one corrected finding and one rewritten recommendation; step limit ends in `limited`; model outage falls back to G1/G2; the audit trail lists every call in order
+  - _Requirements: R17.1, R17.3, R17.5, R17.7–R17.9, R17.11, R14; design §10.4, D-12_
+
+- [ ] 27. Expose the tool registry as an MCP server and wire it into Kiro (front 2)
+  - `policy_playground/agent/mcp_server.py` with FastMCP (`stateless_http=True`, `json_response=True`) built from the same registry as task 25, mounted at `/mcp`, actor taken from the request's Cognito JWT; pin `mcp==1.9.4`; add the `policy-playground` server to `.kiro/settings/mcp.json`
+  - Raise the Lambda `timeout` to 120 s in `infra/stack.py`
+  - Verifiable completion: an MCP client lists the eight tools and runs `run_scenario` against the deployed URL; Kiro calls the same tool
+  - _Requirements: R17.6, R17.10; design §10.4, §16_
+
+- [ ] 28. Show the agent investigation in the interface (front 3)
+  - "Investigar com o agente" action after a scenario is confirmed; panel with the plan, the timeline of tool calls (input summary, status, recovered errors), the findings with the SIMULADO badge linked to their executions, and the recommendation; explicit messages for `limited` and `model_unavailable`; cost per investigation from the token count
+  - Verifiable completion: the demo flow runs end to end in the deployed stack without opening the developer console
+  - _Requirements: R17.3, R17.7–R17.9, R2, R10; design §10.4, §11_
+
+- [ ] 28.1 Business evidence and pitch (front 5)
+  - Source for each number in `docs/working-backwards.md`, or label it as an estimate with its assumptions; in-app hypothesis-to-evidence time measured live against the baseline; cost per investigation; pitch script with one speaker per section and a timed rehearsal
+  - _Requirements: Primary-objective NFR 1–3, NFR FinOps_
+
+- [ ] 29. Validate the agent flow on the deployed stack (before 12:35 COT / 14:35 BRT)
+  - Demo flow: intent "aumentar a renda mínima para 3000" → confirm `P001=3000` → agent states the plan, investigates with ≥ 1 sensitivity run and a comparison → ≥ 1 finding bound to an execution → recommendation → human decision with the evidence on screen
+  - Run three times on the deployed URL; record steps, tokens and latency; rehearse plan B (model disabled → G1/G2); update `tasks.md` and README
+  - _Requirements: R17 (integrated), Primary-objective NFR 2–3; design §14_
+
+---
+
 ## Conditional tasks (gated by an open question / credit-policy platform access — not started until resolved)
 
 These correspond to the ◑ rows in design §14.1. They are explicitly out of the MVP-core start set and must not be begun until the gate is resolved by a human decision.
@@ -328,6 +368,7 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 | R14 Traceability/audit | 7.2, 9.1, 9.3 (+ C4 for storage-level immutability) |
 | R15 Governed data / privacy | 17, 21, 22 |
 | R16 Consume+validate Policy Spec | 2, 3 (+ C5 real schema) |
+| R17 Investigation agent + MCP | 24.1, 25, 26, 27, 28, 29 |
 | NFR lead-time | 19.1, 20, 23 (in-app proxy); end-to-end measurement OQ-13 |
 | NFR usability (no code) | 10, 15 |
 | NFR performance (progress, 30 s P95) | 7.2, 19, 24 |
@@ -335,7 +376,7 @@ These correspond to the ◑ rows in design §14.1. They are explicitly out of th
 | NFR FinOps | 7.2, 12, 18, 19.1, 21, 23 |
 | NFR reliability/integrity | 7, 7.2, 18, 24 |
 
-Every R1–R16 and NFR maps to at least one task. Tasks C1–C5 are conditional and carry their gating OQ/risk; nothing architecturally foreseen but un-gated is presented as MVP-core work.
+Every R1–R17 and NFR maps to at least one task. Tasks C1–C5 are conditional and carry their gating OQ/risk; nothing architecturally foreseen but un-gated is presented as MVP-core work.
 
 ---
 
@@ -366,3 +407,4 @@ This is the Tasks phase deliverable. Per the Kiro Specs workflow, implementation
 | 1.2 | Task 21 provisions ECS Fargate, API Gateway + VPC Link + ALB, DynamoDB, audit bucket, Athena and Cognito groups with an Azure AD slot; task 24 validates scale and resilience. | Design 1.2 §16, D-9; team decisions D-Q5, D-Q7, D-Q8, D-Q9. |
 | 1.2 | C4 narrowed to storage-level immutability (Object Lock); persistence is now core. | OQ-16 and OQ-10 resolved. |
 | 1.2 | Tasks 2, 3.1, 7, 14 and 15 read Playground metadata from the complementary extensions file and the synthetic dataset; the Policy Spec fixture is never modified. | R16.3; design §6.1.1. |
+| 1.3 | Phase 10 added (unified with the team proposal): early deploy 24.1, tasks 25–29 for the investigation agent (tool registry, loop and job, MCP server, interface, deployed validation) and 28.1 for business evidence and pitch, in five fronts. | Requirements 1.3 R17; design 1.3 §10.4. |

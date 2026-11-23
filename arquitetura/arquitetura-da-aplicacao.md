@@ -47,7 +47,7 @@ O caminho síncrono destacado depende só de borda, API e DynamoDB. Bedrock, fil
 | `worker-sim` | Mesma imagem, `APP_ROLE=worker-sim`, Fargate Spot | 0 a N pela fila | `SimulatedRunner` sobre o fixture sintético, geradores G1 e G2, artefato de diff | Chamar o modelo; ler o Motivo de Decisão no MVP (ADR-17) |
 | `worker-ingest` | Mesma imagem, `APP_ROLE=worker-ingest`, Fargate Spot | 0 a 1 | Validar Policy Spec, extensions e dataset na chegada ao S3; gravar o manifesto; marcar o contexto de domínio como desatualizado quando o commit dele é anterior ao da política (R13) | Alterar o Policy Spec |
 | Pipe + barramento | EventBridge Pipes e regras | Gerenciado | Rotear eventos do stream para filas, Firehose e a Lambda de PR | Lógica de negócio |
-| `pr-publisher` (C3) | AWS Lambda fora da VPC, acionada pelo evento `ChangeArtifactSelected`; token do Git no Secrets Manager | Por evento | Abrir o PR real de revisão no repositório SYN e registrar o link (R12) | Merge ou deploy; entra só se a OQ-9 confirmar o acesso (ADR-18) |
+| `pr-publisher` (C3) | AWS Lambda fora da VPC, acionada pelo evento `ChangeArtifactSelected`; token do Git no Secrets Manager | Por evento | Abrir o PR real de revisão no repositório da plataforma de políticas de crédito e registrar o link (R12) | Merge ou deploy; entra só se a OQ-9 confirmar o acesso (ADR-18) |
 | `runner-real` (C1) | Step Functions → ECS RunTask da mesma imagem | Por execução | Estudo real e comparação com o `Motivo de Decisão` (ADR-17) | Entra só se a OQ-4 for resolvida |
 
 O WAF fica no CloudFront porque o AWS WAF não se associa a APIs HTTP do API Gateway ([AWS re:Post](https://repost.aws/questions/QUXjJnNPjoRgqgwSs-5jbMjw/aws-waf-for-http-apis)). A SPA e a API ficam no mesmo domínio, o que também elimina CORS.
@@ -255,7 +255,7 @@ Uma task de 0,5 vCPU atende com folga a carga da API. As 2 tasks existem por dis
 | `worker-sim` | Backlog por task na fila `sim` | 0 a 10 | Tempo máximo por job; jobs repetidos não chegam à fila (reuso por hash) |
 | DynamoDB | On-demand | Sem configuração | Partição por investigação evita chave quente; contadores de orçamento por usuário e dia |
 | Bedrock | Cota de TPM e RPM por modelo e região | Pedido de aumento; inference profile entre regiões | Orçamento de tokens por usuário; circuit breaker |
-| C1 (execução real) | Step Functions com limite de concorrência | Definido pelo SYN | Workgroup do Athena com limite de dados lidos por consulta |
+| C1 (execução real) | Step Functions com limite de concorrência | Definido pela plataforma de políticas de crédito | Workgroup do Athena com limite de dados lidos por consulta |
 
 ### 7.3 O que acontece na rajada
 
@@ -510,7 +510,7 @@ A arquitetura cobre os 16 requisitos, as 6 famílias de NFR e as 12 decisões do
 
 | Requisito | Como a arquitetura atende | Cobertura |
 | --- | --- | --- |
-| R1 Exploração da política | `worker-ingest` valida e grava o manifesto; `GET /policies`; DAG na SPA; área SYN e proveniência pelo extensions no S3 | Coberto |
+| R1 Exploração da política | `worker-ingest` valida e grava o manifesto; `GET /policies`; DAG na SPA; área da política e proveniência pelo extensions no S3 | Coberto |
 | R2 Duas entradas, modelo híbrido | Hipótese visual responde 201 sem modelo; linguagem natural responde 202 pelo `worker-llm` | Coberto |
 | R3 Estruturação da hipótese | `worker-llm` + Bedrock; pedido de esclarecimento; confirmação antes do cenário | Coberto |
 | R4 Confirmação humana | `POST /hypotheses/{id}/confirm` com a versão editada; nenhum caminho até produção | Coberto |
@@ -520,7 +520,7 @@ A arquitetura cobre os 16 requisitos, as 6 famílias de NFR e as 12 decisões do
 | R8 Descoberta limitada | G1 e G2 no `worker-sim`; cap por flag; ranking com contadores `REL#` (R8.6) | Ajustado nesta revisão |
 | R9 Finding vira cenário | `POST /findings/{id}/scenario`, sem execução automática | Coberto |
 | R10 Decisão humana | Eventos imutáveis com `supersedes`; seleção explícita em `POST /scenarios/{id}/selection` | Ajustado nesta revisão |
-| R11 Código e testes | `ArtifactPublisher` grava a demo rotulada no S3; código SYN real depende da OQ-9 | Condicional |
+| R11 Código e testes | `ArtifactPublisher` grava a demo rotulada no S3; código real da plataforma depende da OQ-9 | Condicional |
 | R12 Pull request | Intenção de PR rastreável no S3; PR real pela Lambda `pr-publisher` fora da VPC (ADR-18), ativada quando a OQ-9 confirmar o acesso | Condicional |
 | R13 Frescor do contexto de domínio | `worker-ingest` compara commits e marca o contexto como desatualizado; a API exibe o aviso | Ajustado nesta revisão |
 | R14 Rastreabilidade e auditoria | `pp-events`, outbox, Firehose e Object Lock; reprodução por hash com `runnerVersion` = digest da imagem | Coberto |
@@ -546,7 +546,7 @@ As decisões D-1 a D-12 do design se mantêm. D-9 e D-11 foram refinadas pelos A
 
 Sem a OQ-6, a opção B produz uma execução que o próprio design manda não exibir como impacto. Decisão: opção A no hackathon (ADR-17). A opção B passa a ser o primeiro passo do C1, assim que o time confirmar que as entradas das propostas estão disponíveis.
 
-**2. Saída para o PR real (R12, C3) e para os estudos SYN (C1).** A VPC não tem rota para a internet, então o PR real não chega ao repositório.
+**2. Saída para o PR real (R12, C3) e para os estudos da plataforma (C1).** A VPC não tem rota para a internet, então o PR real não chega ao repositório.
 
 | Opção | Custo | Postura |
 | --- | --- | --- |
@@ -554,7 +554,7 @@ Sem a OQ-6, a opção B produz uma execução que o próprio design manda não e
 | NAT Gateway com AWS Network Firewall e allowlist do domínio do Git | Algumas centenas de dólares por mês | Abre saída para toda a VPC, filtrada |
 | Repositório interno alcançável por PrivateLink ou Transit Gateway | Depende da rede corporativa | Melhor opção se a rede do banco já oferecer o caminho |
 
-Decisão: Lambda fora da VPC (ADR-18), ativada só quando a OQ-9 confirmar o acesso ao repositório. O C1 tem a mesma pergunta para alcançar os estudos SYN e deve usar o caminho que a rede corporativa já aprovar.
+Decisão: Lambda fora da VPC (ADR-18), ativada só quando a OQ-9 confirmar o acesso ao repositório. O C1 tem a mesma pergunta para alcançar os estudos da plataforma e deve usar o caminho que a rede corporativa já aprovar.
 
 ### 11.3 Pontos que o design.md e o tasks.md precisam absorver
 
