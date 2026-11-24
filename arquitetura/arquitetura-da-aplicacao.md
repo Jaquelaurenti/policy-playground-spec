@@ -493,6 +493,8 @@ Continuam em aberto: o número exato da cota mínima na conta, os anos de reten�
 | Claude no Bedrock (ADR-10) | Amazon Nova Lite (`PP_MODEL_ID`) ou nenhum modelo | IA só sugere, sem números; G1/G2 funcionam sem modelo |
 | WAF + throttling por usuário | Throttling no estágio do HTTP API (10 req/s, rajada de 20) | Limite de abuso |
 | Budgets em modo econômico (ADR-11) | Alertas em US$ 1 (20%) e no teto de US$ 5, real e previsto | Custo visível antes da fatura |
+| `ArtifactPublisher` gravando o artefato de mudança no S3 (R11, §9.2 do design) | Pacote para engenharia gerado na mesma Lambda e guardado na tabela DynamoDB (evento `ChangePackageGenerated`); sem PR real | Artefato determinístico, rastreável e não submetido; o PR real segue no desenho de produção (`pr-publisher`, ADR-18) |
+| Worker de IA de uma chamada (`worker-llm`) | Agente Investigador em loop na Converse com 9 tools e servidor MCP em `/mcp/stream` (R17, design §10.4) | IA só propõe; números só do motor, agora com bloqueio no código |
 
 **Por que a Amazon Nova.** Créditos promocionais costumam não cobrir modelos de terceiros vendidos pelo Marketplace, como os da Anthropic. A Nova é da própria AWS. Confira em Billing → Credits antes de ligar `PP_MODEL_ID`. Sem a variável, a demo roda sem modelo e mostra só as sugestões determinísticas.
 

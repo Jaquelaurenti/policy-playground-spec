@@ -90,7 +90,7 @@ code { font-family: var(--mono); font-size: .9em; }
     <p>Quem chega, por onde passa e onde cada coisa é gravada. Em verde, o caminho do agente até o modelo.</p>
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1200 690" role="img" aria-label="Arquitetura AWS do Policy Playground: personas entram pelo CloudFront e pelo Cognito; o HTTP API leva /api e /mcp para uma Lambda com API, motor determinístico, Agente Investigador e servidor MCP; a Lambda grava eventos no DynamoDB e auditoria no S3 e chama o Bedrock; o deploy vem do GitHub Actions por OIDC.">
+      <svg viewBox="0 0 1200 690" role="img" aria-label="Arquitetura AWS do Policy Playground: personas entram pelo CloudFront e pelo Cognito; o HTTP API leva /api e /mcp para uma Lambda com API, motor determinístico, Agente Investigador, servidor MCP e pacote para engenharia; a Lambda grava eventos no DynamoDB e auditoria no S3 e chama o Bedrock; o deploy vem do GitHub Actions por OIDC.">
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
           <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0a746f"/></marker>
@@ -133,13 +133,14 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-sub" x="546" y="355" text-anchor="middle">JWT · 10 req/s</text>
 
         <!-- Lambda -->
-        <rect class="box" x="680" y="220" width="252" height="232" rx="10"/>
+        <rect class="box" x="680" y="220" width="252" height="270" rx="10"/>
         <text class="t-title" x="696" y="240">Lambda · imagem do app</text>
         <rect class="box" x="694" y="250" width="224" height="30" rx="6"/><text x="706" y="270">API (FastAPI + Web Adapter)</text>
         <rect class="box" x="694" y="288" width="224" height="30" rx="6"/><text x="706" y="308">Motor determinístico · SIMULADO</text>
-        <rect class="acc-box" x="694" y="326" width="224" height="30" rx="6"/><text class="t-acc" x="706" y="346">Agente Investigador (loop)</text>
-        <rect class="acc-box" x="694" y="364" width="224" height="30" rx="6"/><text class="t-acc" x="706" y="384">Servidor MCP · 9 tools</text>
-        <rect class="box" x="694" y="402" width="224" height="38" rx="6"/><text x="706" y="418">Jobs assíncronos</text><text class="t-sub" x="706" y="433">execução · sugestões · investigação</text>
+        <rect class="acc-box" x="694" y="326" width="224" height="30" rx="6"/><text class="t-acc" x="706" y="346">Agente Investigador (cliente MCP)</text>
+        <rect class="acc-box" x="694" y="364" width="224" height="30" rx="6"/><text class="t-acc" x="706" y="384">↑ Servidor MCP · 9 tools</text>
+        <rect class="box" x="694" y="402" width="224" height="30" rx="6"/><text x="706" y="422">Pacote para engenharia</text>
+        <rect class="box" x="694" y="440" width="224" height="38" rx="6"/><text x="706" y="456">Jobs assíncronos</text><text class="t-sub" x="706" y="471">execução · sugestões · investigação</text>
 
         <!-- Dados e IA -->
         <rect class="box" x="988" y="90" width="184" height="56" rx="8"/>
@@ -197,7 +198,7 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-edge" x="764" y="182">auto-invocação (Event)</text>
 
         <path class="edge" d="M916,220 V118 H986" marker-end="url(#a)"/>
-        <text class="t-edge" x="924" y="110">grava eventos</text>
+        <text class="t-edge" x="924" y="110">eventos e pacotes</text>
 
         <path class="edge" d="M932,228 H986" marker-end="url(#a)"/>
         <text class="t-edge" x="938" y="270">PutObject</text>
@@ -206,38 +207,38 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-acc" x="938" y="306" font-size="11">Converse</text>
         <text class="t-acc" x="938" y="319" font-size="11">+ toolUse</text>
 
-        <path class="edge" d="M755,452 V508" marker-end="url(#a)"/>
-        <text class="t-edge" x="762" y="486">logs</text>
+        <path class="edge" d="M755,490 V508" marker-end="url(#a)"/>
+        <text class="t-edge" x="762" y="503">logs</text>
 
-        <path class="edge" d="M931,508 V454" marker-end="url(#a)"/>
-        <text class="t-edge" x="938" y="486">imagem</text>
+        <path class="edge" d="M931,508 V492" marker-end="url(#a)"/>
+        <text class="t-edge" x="938" y="503">imagem</text>
 
         <path class="edge" d="M190,626 H854" marker-end="url(#a)"/>
         <text class="t-edge" x="300" y="618">OIDC → papel do deploy → cdk deploy (sem chave de acesso)</text>
         <path class="edge-dash" d="M931,600 V564" marker-end="url(#a)"/>
       </svg>
       </div>
-      <figcaption>O CloudFront serve o site e repassa <code>/api/*</code>; o cliente MCP vai direto ao API Gateway com um token do Cognito. Uma única Lambda atende a API e roda os jobs chamando a si mesma. Só o job do agente chama o Bedrock, e todo passo dele vira evento no DynamoDB e cópia no S3. Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que são da arquitetura-alvo.</figcaption>
+      <figcaption>O CloudFront serve o site e repassa <code>/api/*</code>; o cliente MCP vai direto ao API Gateway com um token do Cognito. Uma única Lambda atende a API e roda os jobs chamando a si mesma. Só o job do agente chama o Bedrock, e todo passo dele vira evento no DynamoDB e cópia no S3. O pacote para engenharia também fica no DynamoDB, sem serviço novo. Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que são da arquitetura-alvo.</figcaption>
     </figure>
   </section>
 
   <section aria-labelledby="h-fluxo">
     <h2 id="h-fluxo">Fluxo funcional</h2>
-    <p>Uma hipótese do começo à decisão. Os dois passos em laranja são os pontos em que só uma pessoa pode avançar.</p>
+    <p>Uma hipótese do começo à decisão. Os dois passos em laranja são os pontos em que só uma pessoa pode avançar. O passo 11 fecha o ciclo com o pacote para engenharia.</p>
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1200 560" role="img" aria-label="Fluxo funcional em raias: o especialista escreve a intenção, a aplicação estrutura a hipótese, o especialista confirma o cenário, o motor simula, o especialista aciona o agente, o agente planeja e chama ferramentas conversando com o Bedrock a cada passo, registra achados com evidência, envia a recomendação, o especialista revisa os achados e o aprovador decide; analista e leitor consultam a trilha.">
+      <svg viewBox="0 0 1316 560" role="img" aria-label="Fluxo funcional em raias: o especialista escreve a intenção, a aplicação estrutura a hipótese, o especialista confirma o cenário, o motor simula, o especialista aciona o agente, o agente planeja e chama ferramentas conversando com o Bedrock a cada passo, registra achados com evidência, envia a recomendação, o especialista revisa os achados e o aprovador decide; gera o pacote para engenharia se aceitou; analista e leitor consultam a trilha.">
         <defs>
           <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
           <marker id="bb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0a746f"/></marker>
         </defs>
 
         <!-- Raias -->
-        <rect class="lane-alt" x="0" y="130" width="1200" height="90"/>
-        <rect class="lane-alt" x="0" y="310" width="1200" height="80"/>
-        <rect class="lane-alt" x="0" y="470" width="1200" height="80"/>
-        <line class="lane" x1="0" y1="40" x2="1200" y2="40"/>
-        <line class="lane" x1="0" y1="550" x2="1200" y2="550"/>
+        <rect class="lane-alt" x="0" y="130" width="1316" height="90"/>
+        <rect class="lane-alt" x="0" y="310" width="1316" height="80"/>
+        <rect class="lane-alt" x="0" y="470" width="1316" height="80"/>
+        <line class="lane" x1="0" y1="40" x2="1316" y2="40"/>
+        <line class="lane" x1="0" y1="550" x2="1316" y2="550"/>
         <text class="t-title" x="12" y="80">Especialista</text><text class="t-sub" x="12" y="96">de política</text>
         <text class="t-title" x="12" y="170">Aplicação</text><text class="t-sub" x="12" y="186">API + motor</text>
         <text class="t-title t-acc" x="12" y="260">Agente</text><text class="t-sub" x="12" y="276">Investigador</text>
@@ -283,7 +284,7 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-gate" x="1078" y="434" text-anchor="end">gate humano 2</text>
 
         <!-- Leitores -->
-        <rect class="band" x="150" y="488" width="1036" height="44" rx="8"/>
+        <rect class="band" x="150" y="488" width="1152" height="44" rx="8"/>
         <text x="166" y="508">Leem política, hipóteses, execuções, achados e a trilha de auditoria</text>
         <text class="t-sub" x="166" y="523">não criam, não executam, não decidem · o agente acionado por eles também não executa</text>
 
@@ -306,9 +307,19 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-sub" x="680" y="226">job assíncrono</text>
         <text class="t-sub" x="992" y="126">analisar · descartar · útil?</text>
         <text class="t-sub" x="1186" y="472" text-anchor="end">aceitar · rejeitar · adiar</text>
+        <!-- 11 -->
+        <rect class="box" x="1206" y="59" width="100" height="52" rx="8"/>
+        <text class="t-mono" x="1216" y="77">11</text><text x="1216" y="94">Gera o pacote</text><text x="1216" y="106">p/ engenharia</text>
+        <text class="t-sub" x="1216" y="126">não submetido</text>
+        <rect class="band" x="1206" y="160" width="100" height="44" rx="8" stroke-dasharray="4 4"/>
+        <text class="t-sub" x="1216" y="178">PR real</text><text class="t-sub" x="1216" y="194">só com OQ-9</text>
+        <path class="edge-dash" d="M1256,111 V158" marker-end="url(#b)"/>
+        <path class="edge" d="M1186,430 H1194 V85 H1204" marker-end="url(#b)"/>
+        <text class="t-sub" x="1187" y="290" transform="rotate(-90 1187 290)" text-anchor="middle">se aceitar</text>
+        <text class="t-sub" x="1216" y="222">patch · 12/12</text><text class="t-sub" x="1216" y="236">manifesto · PR</text>
       </svg>
       </div>
-      <figcaption>Nada é simulado antes do passo 3. Do 6 ao 8 o agente trabalha sozinho, até 14 passos, 6 simulações e 40 mil tokens. Ele escolhe o que testar, inclusive uma variação do cenário, e todo número que cita precisa existir numa execução do motor. Se não existir, a ferramenta recusa e o agente corrige. A decisão do passo 10 pode ser do aprovador de risco ou do próprio especialista.</figcaption>
+      <figcaption>Nada é simulado antes do passo 3. Do 6 ao 8 o agente trabalha sozinho, até 14 passos, 6 simulações e 40 mil tokens. Ele escolhe o que testar, inclusive uma variação do cenário, e todo número que cita precisa existir numa execução do motor. Se não existir, a ferramenta recusa e o agente corrige. A decisão do passo 10 pode ser do aprovador de risco ou do próprio especialista. Se for aceite, o especialista gera no passo 11 o pacote para engenharia: a mudança no Policy Spec, os testes de regressão conferidos pelo motor, o manifesto e a prévia do PR. Nada é submetido; abrir o PR real depende de acesso aos repositórios (OQ-9).</figcaption>
     </figure>
   </section>
 
@@ -320,8 +331,8 @@ code { font-family: var(--mono); font-size: .9em; }
         <header><span class="tag">pessoa</span><h3>Especialista de política</h3><span class="grp">grupo policy-specialist</span></header>
         <dl>
           <dt>Quer</dt><dd>Testar uma hipótese de política sem escrever SQL ou Python e ver o impacto com evidência.</dd>
-          <dt>Pode</dt><dd>Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados e decidir.</dd>
-          <dt>No fluxo</dt><dd>Passos 1, 3, 5 e 9; pode decidir no 10.</dd>
+          <dt>Pode</dt><dd>Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados, decidir e gerar o pacote para engenharia.</dd>
+          <dt>No fluxo</dt><dd>Passos 1, 3, 5, 9 e 11; pode decidir no 10.</dd>
         </dl>
       </article>
       <article class="p">
@@ -329,7 +340,7 @@ code { font-family: var(--mono); font-size: .9em; }
         <dl>
           <dt>Quer</dt><dd>Aprovar ou barrar a mudança olhando a evidência e a trilha, não a opinião.</dd>
           <dt>Pode</dt><dd>Ler tudo e registrar a decisão: aceitar, rejeitar ou adiar, com justificativa.</dd>
-          <dt>Não pode</dt><dd>Criar hipóteses, simular ou acionar o agente.</dd>
+          <dt>Não pode</dt><dd>Criar hipóteses, simular, acionar o agente ou gerar o pacote para engenharia.</dd>
         </dl>
       </article>
       <article class="p">

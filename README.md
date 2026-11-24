@@ -25,8 +25,8 @@ Perfil demo serverless (ADR-19) com a camada agêntica (R17), na região do proj
 | **CloudFront** | Serve o site (S3 privado) e repassa `/api/*` ao API Gateway, na mesma origem |
 | **Cognito** | Login; os grupos são os papéis do produto |
 | **API Gateway (HTTP)** | Rotas `/api/*` e `/mcp/*`, autorizador JWT do Cognito, throttling de 10 req/s |
-| **Lambda** (imagem do app) | API (FastAPI + Lambda Web Adapter), motor determinístico, Agente Investigador, servidor MCP e jobs assíncronos por auto-invocação |
-| **DynamoDB** | Eventos só de acréscimo, projeções e chaves de idempotência |
+| **Lambda** (imagem do app) | API (FastAPI + Lambda Web Adapter), motor determinístico, Agente Investigador, servidor MCP, pacote para engenharia e jobs assíncronos por auto-invocação |
+| **DynamoDB** | Eventos só de acréscimo, projeções, chaves de idempotência e pacotes para engenharia |
 | **S3 · auditoria** | Cópia de cada evento; a Lambda só tem `PutObject` em `events/*` |
 | **Amazon Bedrock** | Nova Lite pela Converse com tool use; só o job do agente chama o modelo |
 | **CloudWatch Logs, ECR, Budgets** | Logs por 7 dias, imagem do backend, alertas em US$ 1 e US$ 5 |
@@ -46,13 +46,14 @@ Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que
 6. O agente encerra com uma recomendação. Ele não decide.
 7. O especialista revisa os achados (analisar, descartar, marcar como útil).
 8. **Gate humano 2:** o aprovador de risco ou o especialista decide (aceitar, rejeitar ou adiar) com a evidência e a trilha de auditoria.
+9. Se a decisão for aceitar, o especialista gera o **pacote para engenharia**: mudança no Policy Spec, testes de regressão conferidos pelo motor, manifesto e prévia do PR. Nada é submetido; o PR real depende de acesso aos repositórios (OQ-9).
 
 ## Personas
 
 | Persona | Grupo do Cognito | Pode | Não pode |
 | --- | --- | --- | --- |
-| Especialista de política | `policy-specialist` | Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados e decidir | — |
-| Aprovador de risco | `risk-approver` | Ler tudo e registrar a decisão (aceitar, rejeitar, adiar) | Criar hipóteses, simular, acionar o agente |
+| Especialista de política | `policy-specialist` | Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados, decidir e gerar o pacote para engenharia | — |
+| Aprovador de risco | `risk-approver` | Ler tudo e registrar a decisão (aceitar, rejeitar, adiar) | Criar hipóteses, simular, acionar o agente, gerar o pacote |
 | Analista de dados | `data-analyst` | Ler política, hipóteses, execuções, achados e trilha | Executar ou decidir (no MVP, mesmas permissões do leitor) |
 | Leitor | `viewer` | Somente ler | Mudar estado, inclusive por meio do agente ou do MCP |
 | **Agente Investigador** (não humano) | age como quem o acionou | Planejar, usar as 9 tools, simular variações, registrar achados e recomendar | Inventar números, alterar a política, decidir |
@@ -87,7 +88,7 @@ O motor determinístico virou o conjunto de ferramentas do agente. O agente deci
 
 **Limites (FinOps):** 14 passos, 6 simulações e 40 mil tokens por investigação; 3 investigações por hipótese. Sem modelo configurado, a investigação cai para os candidatos G1/G2 e a tela avisa.
 
-**MCP:** as mesmas tools ficam em `/mcp/stream` (Streamable HTTP, stateless). Na AWS, a saída `McpUrl` do deploy dá o endereço, com `Authorization: Bearer <token do Cognito>`. Localmente, o `.kiro/settings/mcp.json` traz o servidor `policy-playground` apontando para `http://localhost:8000/mcp/stream`; habilite-o no Kiro com o backend rodando.
+**MCP:** o próprio agente é cliente MCP. A cada investigação ele abre uma sessão com o servidor MCP do Playground, descobre as ferramentas pelo `tools/list` e chama cada uma pelo `tools/call`; a tela mostra "via MCP · 9 ferramentas" e a trilha registra o transporte de cada chamada. O mesmo servidor fica exposto em `/mcp/stream` (Streamable HTTP, stateless) para clientes externos. Na AWS, a saída `McpUrl` do deploy dá o endereço, com `Authorization: Bearer <token do Cognito>`. Localmente, o `.kiro/settings/mcp.json` traz o servidor `policy-playground` apontando para `http://localhost:8000/mcp/stream`; habilite-o no Kiro com o backend rodando.
 
 ## Estrutura do repositório
 
