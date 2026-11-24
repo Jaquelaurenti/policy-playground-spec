@@ -34,6 +34,7 @@ class Config:
     agent_max_steps: int = 14             # passos do loop por investigação
     agent_max_simulations: int = 6        # simulações por investigação
     agent_token_cap: int = 40000          # teto de tokens por investigação
+    agent_via_mcp: bool = True            # o agente chama as tools pelo protocolo MCP (R17.6)
 
 
 def _now():
@@ -276,7 +277,7 @@ class Playground:
             for c in r.calls[sent["calls"]:]:
                 self._emit(hid, "AgentToolCalled", {"jobId": jid, "step": c["step"], "tool": c["tool"],
                                                     "input": _clip(c["input"]), "status": c["status"],
-                                                    "error": c.get("error")}, "agent")
+                                                    "error": c.get("error"), "via": c.get("via")}, "agent")
             sent["calls"] = len(r.calls)
             for eid, ex in r.executions.items():
                 if eid in sent["execs"]:
@@ -295,13 +296,21 @@ class Playground:
                                                      "scenarioId": sc["scenarioId"]}, "agent")
             sent["findings"] = len(r.findings)
 
+        mcp_client = None
         try:
+            try:                                      # o agente usa o motor pelo protocolo MCP (R17.6)
+                from .agent.mcp_client import McpToolClient
+                mcp_client = McpToolClient(reg) if self.cfg.agent_via_mcp else None
+            except ImportError:
+                mcp_client = None                     # sem o pacote mcp: chamadas diretas ao registro
             out = investigate(self.ai, reg, rec["hypothesis"]["intent"], sc["overrides"],
-                              max_steps=self.cfg.agent_max_steps, token_cap=self.cfg.agent_token_cap, on_step=flush)
+                              max_steps=self.cfg.agent_max_steps, token_cap=self.cfg.agent_token_cap, on_step=flush,
+                              tools=mcp_client)
             flush(reg)
             self._emit(hid, "InvestigationCompleted", {"jobId": jid, "status": out["status"], "steps": out["steps"],
                                                        "tokens": out["tokens"], "recommendation": out["summary"],
-                                                       "model": self.ai.name}, "agent")
+                                                       "model": self.ai.name, "transport": out["transport"],
+                                                       "toolsDiscovered": out["toolsDiscovered"]}, "agent")
         except ModelUnavailable as e:
             flush(reg)
             fallback = generators.rank(generators.g1_shared_input(self.model, sc["overrides"])
@@ -318,6 +327,9 @@ class Playground:
             self._emit(hid, "InvestigationCompleted", {"jobId": jid, "status": "error", "steps": 0, "tokens": 0,
                                                        "recommendation": None, "model": self.ai.name,
                                                        "reason": f"{type(e).__name__}: {str(e)[:250]}"}, "system")
+        finally:
+            if mcp_client is not None:
+                mcp_client.close()
 
     # ---- findings e decisões --------------------------------------------------------
     def _finding(self, hid: str, fid: str) -> dict:

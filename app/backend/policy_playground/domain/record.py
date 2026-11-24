@@ -145,6 +145,7 @@ def project(events: list[dict]) -> dict:
                 rec["metrics"]["hypothesisToEvidenceSeconds"] = round(e["at_epoch"] - rec["hypothesis"]["submittedAtEpoch"], 2)
         elif t == "InvestigationCompleted":
             invs[d["jobId"]].update({"state": "done", "outcome": d["status"], "steps": d.get("steps"),
+                                     "transport": d.get("transport"), "toolsDiscovered": d.get("toolsDiscovered"),
                                      "tokens": d.get("tokens", 0), "recommendation": d.get("recommendation"),
                                      "reason": d.get("reason"), "completedAt": e["at"]})
             rec["metrics"]["modelTokens"] = rec["metrics"].get("modelTokens", 0) + d.get("tokens", 0)

@@ -41,18 +41,33 @@ def _visible(text: str) -> str:
     return _THINK.sub("", text).strip()
 
 
+def tool_config(tools=None) -> dict:
+    """toolSpec da Converse. Com um cliente MCP, os nomes e descrições vêm do `tools/list` do servidor
+    (descoberta); o schema de entrada usa o contrato do registro, que é o mesmo do servidor."""
+    if tools is None or not hasattr(tools, "list_tools"):
+        return {"tools": [{"toolSpec": t} for t in TOOL_SPECS]}
+    specs = {t["name"]: t for t in TOOL_SPECS}
+    listed = tools.list_tools()
+    return {"tools": [{"toolSpec": {"name": t["name"], "description": t.get("description") or specs.get(t["name"], {}).get("description", ""),
+                                    "inputSchema": specs[t["name"]]["inputSchema"] if t["name"] in specs
+                                    else {"json": t["inputSchema"]}}} for t in listed]}
+
+
 def investigate(model, registry: ToolRegistry, intent: str, overrides: dict, *, max_steps: int = 14,
-                max_tokens: int = 1000, token_cap: int = 40000, on_step=None) -> dict:
-    """Roda a investigação. Levanta `ModelUnavailable` se o modelo não responder já no primeiro passo."""
+                max_tokens: int = 1000, token_cap: int = 40000, on_step=None, tools=None) -> dict:
+    """Roda a investigação. Levanta `ModelUnavailable` se o modelo não responder já no primeiro passo.
+    `tools`: cliente MCP (padrão no produto) ou None para chamar o registro direto (testes, fallback)."""
     user = (f"Intenção do especialista: {intent}\nCenário confirmado (overrides): "
             f"{json.dumps(overrides)}\nInvestigue e registre os achados.")
     msgs = [{"role": "user", "content": [{"text": user}]}]
-    tool_cfg = {"tools": [{"toolSpec": t} for t in TOOL_SPECS]}
+    tool_cfg = tool_config(tools)
+    caller = tools if tools is not None else registry
     tokens, nudged = 0, set()
 
     def result(status, summary="", step=0):
         return {"status": status, "summary": summary, "steps": step, "tokens": tokens,
-                "findings": registry.findings, "calls": registry.calls}
+                "findings": registry.findings, "calls": registry.calls,
+                "transport": getattr(caller, "transport", "direct"), "toolsDiscovered": len(tool_cfg["tools"])}
 
     def needs_sensitivity():
         return (len(registry.executions) < 2 and "sensitivity" not in nudged
@@ -100,7 +115,7 @@ def investigate(model, registry: ToolRegistry, intent: str, overrides: dict, *, 
                 continue
             tu = c["toolUse"]
             try:
-                res, status = {"json": registry.call(tu["name"], tu.get("input") or {})}, "success"
+                res, status = {"json": caller.call(tu["name"], tu.get("input") or {})}, "success"
             except ToolError as e:
                 res, status = {"text": f"erro: {e}"}, "error"
             results.append({"toolResult": {"toolUseId": tu["toolUseId"], "content": [res], "status": status}})

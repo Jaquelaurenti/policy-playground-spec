@@ -28,27 +28,18 @@ _current_actor = contextvars.ContextVar("pp_mcp_actor")
 REGISTRY_TTL_S = 30 * 60
 
 
-def build_mcp_asgi(get_model, resolve_actor):
-    """Devolve (app ASGI para montar em /mcp, lifespan para o FastAPI)."""
-    registries: dict = {}
-
-    def registry() -> ToolRegistry:
-        actor = _current_actor.get()
-        key = (actor.id, tuple(sorted(actor.roles)))
-        now = time.time()
-        for k in [k for k, (_, t) in registries.items() if now - t > REGISTRY_TTL_S]:
-            registries.pop(k, None)
-        reg = registries.get(key, (None, 0))[0] or ToolRegistry(get_model(), actor)
-        registries[key] = (reg, now)
-        return reg
+def build_mcp(get_registry) -> FastMCP:
+    """Servidor MCP com as tools do agente. `get_registry()` devolve o ToolRegistry da chamada:
+    por ator (clientes externos em /mcp/stream) ou o da investigação (agente, em memória)."""
 
     def call(name, **kw):
         try:
-            return registry().call(name, {k: v for k, v in kw.items() if v is not None})
+            return get_registry().call(name, {k: v for k, v in kw.items() if v is not None})
         except ToolError as e:
             raise ValueError(str(e)) from e      # vira isError=true no protocolo
 
-    mcp = FastMCP("policy-playground", stateless_http=True, json_response=True, streamable_http_path="/stream")  # /mcp/stream casa com a rota /mcp/{proxy+}
+    mcp = FastMCP("policy-playground", stateless_http=True, json_response=True,
+                  streamable_http_path="/stream")  # /mcp/stream casa com a rota /mcp/{proxy+}
 
     @mcp.tool(description=DESC["get_policy"])
     def get_policy(rule_ids: list[str] | None = None) -> dict:
@@ -86,6 +77,25 @@ def build_mcp_asgi(get_model, resolve_actor):
     def register_finding(title: str, text: str, ruleRefs: list[str], executionIds: list[str]) -> dict:
         return call("register_finding", title=title, text=text, ruleRefs=ruleRefs, executionIds=executionIds)
 
+    return mcp
+
+
+def build_mcp_asgi(get_model, resolve_actor):
+    """Devolve (app ASGI para montar em /mcp, lifespan para o FastAPI)."""
+    registries: dict = {}
+
+    def registry() -> ToolRegistry:
+        actor = _current_actor.get()
+        key = (actor.id, tuple(sorted(actor.roles)))
+        now = time.time()
+        for k in [k for k, (_, t) in registries.items() if now - t > REGISTRY_TTL_S]:
+            registries.pop(k, None)
+        reg = registries.get(key, (None, 0))[0] or ToolRegistry(get_model(), actor)
+        reg.transport = "mcp"
+        registries[key] = (reg, now)
+        return reg
+
+    mcp = build_mcp(registry)
     inner = mcp.streamable_http_app()
 
     async def app(scope, receive, send):

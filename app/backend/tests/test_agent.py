@@ -84,6 +84,11 @@ class AgentApiTest(unittest.TestCase):
             self.assertEqual(f["evidenceLevel"], "simulated")
             self.assertIn(f["currentExecutionId"], {e["executionId"] for e in rec["executions"]})
         self.assertGreater(rec["metrics"]["modelTokens"], 0)
+        # R17.6: o agente chamou cada tool pelo protocolo MCP, com as tools descobertas no servidor
+        self.assertEqual((inv["transport"], inv["toolsDiscovered"]), ("mcp", 9))
+        self.assertTrue(all(s.get("via") == "mcp" for s in inv["timeline"] if s["tool"] != "_plan"))
+        recusa = next(s for s in inv["timeline"] if s["status"] == "error")
+        self.assertIn("números sem evidência", recusa["error"])     # a mensagem atravessa o MCP intacta
         self.assertIsNotNone(rec["metrics"]["hypothesisToEvidenceSeconds"])
         # a execução do agente pode ser aberta como qualquer outra
         ex = c.get(f"/api/executions/{inv['executionIds'][0]}", headers=SPECIALIST).json()
@@ -134,6 +139,42 @@ class AgentApiTest(unittest.TestCase):
         c.post(f"/api/hypotheses/{hid}/investigations", headers=SPECIALIST)
         inv = c.get(f"/api/hypotheses/{hid}", headers=SPECIALIST).json()["investigations"][0]
         self.assertEqual((inv["state"], inv["outcome"]), ("done", "error"))
+
+
+class McpClientTest(unittest.TestCase):
+    """O cliente MCP em memória que o agente usa (R17.6)."""
+
+    def test_descobre_e_chama_pelo_protocolo(self):
+        from policy_playground.agent.mcp_client import McpToolClient
+        reg = ToolRegistry(MODEL, Actor("a", {"Policy Specialist"}))
+        with McpToolClient(reg) as cli:
+            names = {t["name"] for t in cli.list_tools()}
+            self.assertEqual(names, {t["name"] for t in TOOL_SPECS})
+            r = cli.call("run_scenario", {"overrides": {"P001": 3000}})
+            self.assertEqual(r["deltas"]["motivos"]["102"]["delta"], 4)
+            with self.assertRaises(ToolError) as e:
+                cli.call("register_finding", {"title": "x", "text": "sobe 42", "ruleRefs": ["R005"],
+                                              "executionIds": [r["executionId"]]})
+            self.assertIn("42", str(e.exception))
+        self.assertEqual(reg.calls[0]["via"], "mcp")
+        self.assertIn(r["executionId"], reg.executions)           # o servidor usou o registro da investigação
+
+    def test_funciona_dentro_de_um_laco_assincrono(self):
+        """Na Lambda, o job roda dentro do handler assíncrono POST /events."""
+        import asyncio
+        pg, c = make(ScriptedModel(demo_steps()))
+        h = c.post("/api/hypotheses", json={"intent": "aumentar a renda mínima para 3000"}, headers=SPECIALIST).json()
+        hid = h["hypothesis"]["hypothesisId"]
+        c.post(f"/api/hypotheses/{hid}/scenarios", json={"overrides": {"P001": 3000}}, headers=SPECIALIST)
+        pg.dispatcher = type("NoDispatch", (), {"dispatch": lambda self, job: None})()
+        jid = pg.request_investigation(Actor("ana", {"Policy Specialist"}), hid)["jobId"]
+
+        async def handler():
+            pg.run_job({"kind": "investigation", "hypothesisId": hid, "jobId": jid, "actor": "ana",
+                        "roles": ["Policy Specialist"]})
+        asyncio.run(handler())
+        inv = pg.hypothesis(Actor("ana", {"Policy Specialist"}), hid)["investigations"][0]
+        self.assertEqual((inv["outcome"], inv["transport"]), ("done", "mcp"))
 
 
 class ToolsTest(unittest.TestCase):

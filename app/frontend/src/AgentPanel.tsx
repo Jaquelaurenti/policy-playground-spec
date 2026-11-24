@@ -82,6 +82,7 @@ export function AgentPanel({ rec, canWrite, refresh }: { rec: Json; canWrite: bo
             : <span className={`badge ${OUTCOME[last.outcome]?.cls ?? "b-state"}`}>{OUTCOME[last.outcome]?.text ?? last.outcome}</span>}
           <span className="badge b-sim">SIMULADO</span>
           <span className="spacer" />
+          {last.transport === "mcp" && <span className="badge b-det" title="O agente descobriu as ferramentas pelo tools/list e chamou cada uma pelo tools/call do servidor MCP do Playground">via MCP · {last.toolsDiscovered} ferramentas</span>}
           {last.state === "done" && <span className="muted">{last.steps} passos · {last.tokens?.toLocaleString("pt-BR")} tokens · modelo {last.model}</span>}
         </div>
         <ol className="agent-timeline">

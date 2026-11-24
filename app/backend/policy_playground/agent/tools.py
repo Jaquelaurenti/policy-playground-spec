@@ -87,12 +87,13 @@ class ToolRegistry:
         self.prior_findings = list(prior_findings or [])
         self.calls: list[dict] = []          # no sprint: evento AgentToolCalled no event store
         self.recommendation: str | None = None
+        self.transport = "direct"            # "mcp" quando as chamadas chegam pelo servidor MCP
         self.facts: list[dict] = []          # fatos estruturais devolvidos pelos geradores nesta investigação
 
     # ---- despacho + permissões + auditoria ------------------------------------------
     def call(self, name: str, args: dict) -> dict:
         fn = getattr(self, "t_" + name, None)
-        entry = {"step": len(self.calls) + 1, "tool": name, "input": args}
+        entry = {"step": len(self.calls) + 1, "tool": name, "input": args, "via": self.transport}
         try:
             if fn is None or name not in {t["name"] for t in TOOL_SPECS}:
                 raise ToolError(f"tool desconhecida: {name}")
