@@ -103,14 +103,18 @@ Cada pessoa sobe a demo **no próprio fork**, ligado à **própria conta AWS**. 
    curl -fsSLO https://raw.githubusercontent.com/<seu-usuario>/policy-playground-spec/main/scripts/cloudshell-bootstrap.sh
    bash cloudshell-bootstrap.sh <seu-usuario>/policy-playground-spec us-east-1
    ```
-   O script cria o provedor OIDC do GitHub, o papel `policy-playground-github-deploy` (que só o seu fork pode assumir) e o bootstrap do CDK. Ele aceita os dois formatos de identidade que o GitHub usa no token, o clássico e o imutável, com os IDs numéricos.
+   O script valida o `<dono>/<repo>` e a região antes de mexer na conta. Depois cria o provedor OIDC do GitHub, ou acrescenta a audience `sts.amazonaws.com` se o provedor já existir sem ela, e cria o papel `policy-playground-github-deploy`, que só o seu fork pode assumir. Por fim, faz o bootstrap do CDK.
+
+   O GitHub pode identificar o repositório no token em dois formatos: o clássico (`repo:dono/repo`) e o imutável, com IDs numéricos. Por padrão, o papel aceita os dois. A variável `PP_SUB_FORMAT` muda isso:
+   - `PP_SUB_FORMAT=immutable` aceita só o formato imutável. É a opção mais segura, porque fica presa aos IDs e não ao nome do repositório.
+   - `PP_SUB_FORMAT=classic` aceita só o formato clássico. Use para fork privado, porque a API pública do GitHub não devolve os IDs dele. Nos outros formatos, sem os IDs, o script para com erro.
 3. No fork, crie as **variáveis** da tabela acima (aba *Variables*, não *Secrets*) e o environment **`demo`** restrito à `main`.
 4. Rode **Actions → Deploy demo (AWS) → Run workflow** no fork. Se o environment exigir revisão, aprove em *Review deployments*. A URL aparece no resumo da execução.
 5. Crie os usuários com `scripts/create-demo-user.sh`, como no passo 4 da seção anterior, e ao terminar rode **Destroy demo (AWS)**.
 
 **Problemas comuns**
 
-- **`Not authorized to perform sts:AssumeRoleWithWebIdentity`**: o papel não confia no seu fork. Rode o bootstrap de novo com o `<seu-usuario>/repo` certo. O repositório precisa ser público para o script ler os IDs; se for privado, ele avisa.
+- **`Not authorized to perform sts:AssumeRoleWithWebIdentity`**: o papel não confia no seu fork. Rode o bootstrap de novo com o `<seu-usuario>/repo` certo. Se você usou `PP_SUB_FORMAT=immutable` ou `classic`, confirme que o formato bate com o do seu repositório. Na dúvida, rode sem a variável para aceitar os dois.
 - **`Your account must be verified before you can add new CloudFront resources`**: a conta é nova e ainda está em verificação, o que também impede o CloudShell de abrir. Confira a forma de pagamento e os dados da conta e, se passar de dois dias, abra um chamado gratuito em *Support → Account and billing*. Depois, apague a pilha `PolicyPlaygroundDemo` que ficou em `ROLLBACK_COMPLETE` (CloudFormation → Excluir) e rode o deploy de novo.
 - **CloudShell não abre**: é a mesma verificação de conta. Os três passos do bootstrap também podem ser feitos no console: IAM → Provedores de identidade, IAM → Funções e CloudFormation com o modelo de `npx aws-cdk@2.173.4 bootstrap --show-template`.
 
