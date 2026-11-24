@@ -24,6 +24,7 @@ class AuditSink(Protocol):
 class ModelPort(Protocol):
     name: str
     def suggest(self, context: dict, cap: int) -> tuple[list[dict], int]: ...
+    def converse(self, system: str, messages: list, tool_config: dict, max_tokens: int = ...) -> dict: ...
 
 
 class ModelUnavailable(Exception):

@@ -51,6 +51,7 @@ export const api = {
   execute: (id: string) => call("POST", `/api/hypotheses/${id}/executions`, {}),
   execution: (eid: string) => call("GET", `/api/executions/${eid}`),
   suggest: (id: string) => call("POST", `/api/hypotheses/${id}/suggestions`),
+  investigate: (id: string) => call("POST", `/api/hypotheses/${id}/investigations`),
   transition: (id: string, fid: string, to: string, reason?: string) =>
     call("POST", `/api/hypotheses/${id}/findings/${fid}/transitions`, { to, reason }),
   executeFinding: (id: string, fid: string) => call("POST", `/api/hypotheses/${id}/findings/${fid}/executions`),

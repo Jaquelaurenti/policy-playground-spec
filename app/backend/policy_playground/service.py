@@ -14,13 +14,7 @@ from .domain.record import (DECISION_OUTCOMES, InvalidTransition, check_transiti
                             validate_overrides)
 from .ports import AuditSink, Dispatcher, EventStore, KeyValue, ModelPort, ModelUnavailable
 
-ROLES_WRITE = {"Policy Specialist"}
-ROLES_DECIDE = {"Policy Specialist", "Risk Approver"}
-ROLES_READ = {"Policy Specialist", "Risk Approver", "Data Analyst", "Viewer"}
-
-
-class Forbidden(Exception):
-    pass
+from .roles import ROLES_DECIDE, ROLES_READ, ROLES_WRITE, Actor, Forbidden  # noqa: E402,F401  (reexporta)
 
 
 class NotFound(Exception):
@@ -32,20 +26,14 @@ class Conflict(Exception):
 
 
 @dataclass
-class Actor:
-    id: str
-    roles: set
-
-    def require(self, allowed: set, action: str):
-        if not (self.roles & allowed):
-            raise Forbidden(f"Seu perfil ({', '.join(sorted(self.roles)) or 'nenhum'}) não pode {action}")
-
-
-@dataclass
 class Config:
     suggestion_cap: int = 5               # N de §10.2
     max_suggestion_requests: int = 3      # teto de investigações de IA por hipótese (FinOps)
     model_token_budget: int = 30000       # teto de contexto (ADR-13)
+    agent_max_runs: int = 3               # investigações do agente por hipótese (FinOps, R17.5)
+    agent_max_steps: int = 14             # passos do loop por investigação
+    agent_max_simulations: int = 6        # simulações por investigação
+    agent_token_cap: int = 40000          # teto de tokens por investigação
 
 
 def _now():
@@ -54,6 +42,12 @@ def _now():
 
 
 _ALLOWED_TOKENS = re.compile(r"\b[RP]\d{3}\b")
+
+
+def _clip(obj, limit: int = 400):
+    """Entrada de tool resumida para o evento (a trilha não precisa do texto inteiro)."""
+    s = json.dumps(obj, ensure_ascii=False)
+    return obj if len(s) <= limit else {"resumo": s[:limit] + "…"}
 
 
 def sanitize_ai(s: dict, model, cap_refs: set) -> dict | None:
@@ -237,7 +231,92 @@ class Playground:
                                                  "model": self.ai.name, "tokens": tokens}, "system")
 
     def run_job(self, job: dict) -> None:
-        {"execution": self.run_execution_job, "suggestions": self.run_suggestions_job}[job["kind"]](job)
+        {"execution": self.run_execution_job, "suggestions": self.run_suggestions_job,
+         "investigation": self.run_investigation_job}[job["kind"]](job)
+
+    # ---- Agente Investigador (R17, design §10.4) ----------------------------------------
+    def request_investigation(self, actor: Actor, hid: str) -> dict:
+        """Dispara o agente sobre o cenário confirmado. Só quem pode executar cenários (R17.10)."""
+        actor.require(ROLES_WRITE, "acionar o agente")
+        rec = self._record(hid)
+        if not rec["scenarios"]:
+            raise Conflict("Confirme um cenário antes de acionar o agente")
+        running = [i for i in rec["investigations"] if i["state"] in ("pending", "running")]
+        if running:
+            return {"jobId": running[-1]["jobId"], "state": running[-1]["state"]}
+        if len(rec["investigations"]) >= self.cfg.agent_max_runs:
+            raise Conflict(f"Limite de {self.cfg.agent_max_runs} investigações do agente por hipótese atingido (FinOps)")
+        sc = rec["scenarios"][-1]
+        jid = "J-" + uuid.uuid4().hex[:8]
+        self._emit(hid, "InvestigationRequested", {"jobId": jid, "scenarioId": sc["scenarioId"],
+                                                   "overrides": sc["overrides"], "model": self.ai.name}, actor.id)
+        self.dispatcher.dispatch({"kind": "investigation", "hypothesisId": hid, "jobId": jid,
+                                  "actor": actor.id, "roles": sorted(actor.roles)})
+        return {"jobId": jid, "state": "pending"}
+
+    def run_investigation_job(self, job: dict) -> None:
+        from .agent.loop import investigate
+        from .agent.tools import ToolRegistry, _deltas
+
+        hid, jid = job["hypothesisId"], job["jobId"]
+        rec = self._record(hid)
+        inv = next((i for i in rec["investigations"] if i["jobId"] == jid), None)
+        if not inv or inv["state"] not in ("pending",):
+            return                                        # idempotente: job repetido não roda de novo
+        actor = Actor(job.get("actor", "system"), set(job.get("roles") or []))
+        sc = next(s for s in rec["scenarios"] if s["scenarioId"] == inv["scenarioId"])
+        reg = ToolRegistry(self.model, actor, max_simulations=self.cfg.agent_max_simulations,
+                           prior_findings=[{"title": f.get("title"), "state": f.get("investigationState")}
+                                           for f in rec["findings"]])
+        self._emit(hid, "InvestigationStarted", {"jobId": jid}, "agent")
+        sent = {"calls": 0, "execs": set(), "findings": 0}
+
+        def flush(r: ToolRegistry):
+            for c in r.calls[sent["calls"]:]:
+                self._emit(hid, "AgentToolCalled", {"jobId": jid, "step": c["step"], "tool": c["tool"],
+                                                    "input": _clip(c["input"]), "status": c["status"],
+                                                    "error": c.get("error")}, "agent")
+            sent["calls"] = len(r.calls)
+            for eid, ex in r.executions.items():
+                if eid in sent["execs"]:
+                    continue
+                self._emit(hid, "AgentExecutionCompleted", {
+                    "jobId": jid, "executionId": eid, "scenarioId": sc["scenarioId"], "overrides": ex["overrides"],
+                    "status": "ok", "mode": "SIMULADO", "source": "agent", "comparison": ex["comparison"],
+                    "deltas": _deltas(ex["comparison"]), "runnerVersion": engine.RUNNER_VERSION}, "agent")
+                self.kv.put(f"exec#{eid}", {"hypothesisId": hid, "executionId": eid, "jobState": "done", "status": "ok",
+                                            "mode": "SIMULADO", "source": "agent", "jobId": jid,
+                                            "overrides": ex["overrides"], "comparison": ex["comparison"],
+                                            "rows": ex.get("rows")})
+                sent["execs"].add(eid)
+            for f in r.findings[sent["findings"]:]:
+                self._emit(hid, "FindingSuggested", {**f, "jobId": jid, "hypothesisId": hid,
+                                                     "scenarioId": sc["scenarioId"]}, "agent")
+            sent["findings"] = len(r.findings)
+
+        try:
+            out = investigate(self.ai, reg, rec["hypothesis"]["intent"], sc["overrides"],
+                              max_steps=self.cfg.agent_max_steps, token_cap=self.cfg.agent_token_cap, on_step=flush)
+            flush(reg)
+            self._emit(hid, "InvestigationCompleted", {"jobId": jid, "status": out["status"], "steps": out["steps"],
+                                                       "tokens": out["tokens"], "recommendation": out["summary"],
+                                                       "model": self.ai.name}, "agent")
+        except ModelUnavailable as e:
+            flush(reg)
+            fallback = generators.rank(generators.g1_shared_input(self.model, sc["overrides"])
+                                       + generators.g2_reachability(self.model, sc["overrides"]),
+                                       rec["assessments"], self.cfg.suggestion_cap)
+            for c in fallback:                            # R17.8: sem modelo, seguem os candidatos determinísticos
+                self._emit(hid, "FindingSuggested", {"findingId": "F-" + uuid.uuid4().hex[:8], "jobId": jid,
+                                                     "hypothesisId": hid, "scenarioId": sc["scenarioId"], **c}, "system")
+            self._emit(hid, "InvestigationCompleted", {"jobId": jid, "status": "model_unavailable", "steps": 0,
+                                                       "tokens": 0, "recommendation": None, "model": self.ai.name,
+                                                       "reason": str(e)[:300], "fallbackCount": len(fallback)}, "system")
+        except Exception as e:                            # nunca deixa a investigação presa em "running"
+            flush(reg)
+            self._emit(hid, "InvestigationCompleted", {"jobId": jid, "status": "error", "steps": 0, "tokens": 0,
+                                                       "recommendation": None, "model": self.ai.name,
+                                                       "reason": f"{type(e).__name__}: {str(e)[:250]}"}, "system")
 
     # ---- findings e decisões --------------------------------------------------------
     def _finding(self, hid: str, fid: str) -> dict:

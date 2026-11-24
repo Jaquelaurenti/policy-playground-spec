@@ -2,7 +2,9 @@
   "mcpServers": {
     "aws-docs": {
       "command": "uvx",
-      "args": ["awslabs.aws-documentation-mcp-server@latest"],
+      "args": [
+        "awslabs.aws-documentation-mcp-server@latest"
+      ],
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR",
         "AWS_DOCUMENTATION_PARTITION": "aws"
@@ -12,7 +14,9 @@
     },
     "aws-pricing": {
       "command": "uvx",
-      "args": ["awslabs.aws-pricing-mcp-server@latest"],
+      "args": [
+        "awslabs.aws-pricing-mcp-server@latest"
+      ],
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR",
         "AWS_PROFILE": "default",
@@ -23,7 +27,9 @@
     },
     "aws-diagram": {
       "command": "uvx",
-      "args": ["awslabs.aws-diagram-mcp-server@latest"],
+      "args": [
+        "awslabs.aws-diagram-mcp-server@latest"
+      ],
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR"
       },
@@ -32,7 +38,9 @@
     },
     "aws-iac": {
       "command": "uvx",
-      "args": ["awslabs.aws-iac-mcp-server@latest"],
+      "args": [
+        "awslabs.aws-iac-mcp-server@latest"
+      ],
       "env": {
         "FASTMCP_LOG_LEVEL": "ERROR",
         "AWS_PROFILE": "default",
@@ -40,6 +48,22 @@
       },
       "disabled": true,
       "autoApprove": []
+    },
+    "policy-playground": {
+      "url": "http://localhost:8000/mcp/stream",
+      "headers": {
+        "X-Demo-User": "kiro.demo",
+        "X-Demo-Roles": "Policy Specialist"
+      },
+      "disabled": true,
+      "autoApprove": [
+        "get_policy",
+        "preview_subdag",
+        "trace_output",
+        "compare",
+        "get_candidates",
+        "read_audit"
+      ]
     }
   }
 }

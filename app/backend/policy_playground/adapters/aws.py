@@ -134,6 +134,17 @@ class BedrockModel:
         return json.loads(m.group(0)).get("suggestions", [])[:cap], int(usage.get("inputTokens", 0)) + int(usage.get("outputTokens", 0))
 
 
+    def converse(self, system: str, messages: list, tool_config: dict, max_tokens: int = 1000) -> dict:
+        """Um passo do Agente Investigador (R17): Converse com tool use."""
+        try:
+            return self.client.converse(modelId=self.name, system=[{"text": system}], messages=messages,
+                                        toolConfig=tool_config,
+                                        inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2})
+        except ClientError as e:
+            err = e.response.get("Error", {})
+            raise ModelUnavailable(f"Bedrock indisponível: {err.get('Code')}: {err.get('Message', '')[:160]}") from e
+
+
 class LambdaSelfDispatcher:
     """Tira o job do caminho da requisição (ADR-02): invoca a própria função de forma assíncrona.
     O Lambda Web Adapter entrega eventos não HTTP em POST /events."""
