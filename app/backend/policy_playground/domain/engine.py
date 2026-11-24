@@ -210,3 +210,18 @@ def compare(model: PolicyModel, rows: list[dict]) -> dict:
         "scenario": sum(r["scenario"].get("limite_sugerido") or 0 for r in rows if r["scenario"].get("resultado") == "APROVACAO_SIMULADA"),
     }
     return {"outputs": out, "motivos": mot, "approvedLimitSum": approved_limit, "records": len(rows)}
+
+
+def deltas(cmp: dict) -> dict:
+    """Variações já calculadas pelo motor, para o agente não fazer aritmética (evita 'de 1 para 5' virar '5 novas')."""
+    out = {}
+    for o, v in cmp["outputs"].items():
+        if v["type"] == "category":
+            cats = sorted(set(v["baseline"]) | set(v["scenario"]))
+            out[o] = {c: {"de": v["baseline"].get(c, 0), "para": v["scenario"].get(c, 0),
+                          "delta": v["scenario"].get(c, 0) - v["baseline"].get(c, 0)} for c in cats}
+        else:
+            out[o] = {"de": v["baselineSum"], "para": v["scenarioSum"], "delta": v["scenarioSum"] - v["baselineSum"]}
+    out["motivos"] = {code: {"nome": m["name"], "de": m["baseline"], "para": m["scenario"],
+                             "delta": m["scenario"] - m["baseline"]} for code, m in cmp["motivos"].items()}
+    return out

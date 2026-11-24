@@ -59,6 +59,16 @@ Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que
 | Cliente MCP (Kiro ou outro agente) | dono do token | Usar as mesmas 9 tools em `/mcp/stream` | Ir além das permissões do dono do token |
 | Time CredIA (deploy) | papel via OIDC | Publicar e destruir a demo pelos workflows, só a partir da `main` | Usar chave de acesso |
 
+## Pacote para engenharia (último passo)
+
+Depois de uma decisão de **aceite**, o botão **Gerar pacote** produz, sem IA e de forma determinística, um artefato **não submetido** para revisão da engenharia:
+
+- **Mudança no Policy Spec** como JSON Patch (ex.: `P001 renda_minima 2500 → 3000`), que recusa ser aplicado se a política tiver mudado;
+- **Testes de regressão**, um por proposta sintética, derivados da execução aceita (as que mudam de resultado primeiro);
+- **Verificação independente**: o patch é aplicado numa cópia da política e o motor recalcula tudo do zero (ex.: 12/12 passaram);
+- **Manifesto de rastreabilidade**: hipótese, cenário, execução, deltas, achados aceitos, decisão e versões;
+- **Prévia do pull request** e um arquivo `pytest` para download. Abrir o PR real depende de acesso aos repositórios da plataforma de crédito (OQ-9).
+
 ## Agente Investigador (R17)
 
 O motor determinístico virou o conjunto de ferramentas do agente. O agente decide o que investigar e em que ordem; os números vêm só das execuções. Código em [`app/backend/policy_playground/agent/`](app/backend/policy_playground/agent/).

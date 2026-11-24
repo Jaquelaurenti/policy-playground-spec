@@ -89,7 +89,7 @@ def validate_overrides(model, overrides: dict) -> dict[str, float]:
 def project(events: list[dict]) -> dict:
     """Reconstrói o InvestigationRecord a partir do log de eventos."""
     rec = {"hypothesis": None, "scenarios": [], "executions": {}, "findings": {}, "decisions": [], "assessments": [],
-           "suggestionJobs": [], "investigations": [], "events": len(events), "metrics": {}}
+           "suggestionJobs": [], "investigations": [], "changePackages": [], "events": len(events), "metrics": {}}
     invs: dict[str, dict] = {}
     for e in events:
         t, d = e["type"], e["data"]
@@ -156,6 +156,8 @@ def project(events: list[dict]) -> dict:
             rec["assessments"].append({**d, "by": e["actor"], "at": e["at"]})
             if d["findingId"] in rec["findings"]:
                 rec["findings"][d["findingId"]]["assessment"] = d["relevant"]
+        elif t == "ChangePackageGenerated":
+            rec["changePackages"].append({**d, "generatedAt": e["at"], "generatedBy": e["actor"]})
         elif t == "DecisionRecorded":
             rec["decisions"].append({**d, "decidedBy": e["actor"], "decidedAt": e["at"]})
     if rec["decisions"]:

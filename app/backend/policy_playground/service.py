@@ -256,7 +256,8 @@ class Playground:
 
     def run_investigation_job(self, job: dict) -> None:
         from .agent.loop import investigate
-        from .agent.tools import ToolRegistry, _deltas
+        from .agent.tools import ToolRegistry
+        from .domain.engine import deltas as _deltas
 
         hid, jid = job["hypothesisId"], job["jobId"]
         rec = self._record(hid)
@@ -362,6 +363,66 @@ class Playground:
                                              "supersedes": prev,
                                              "note": "Aceitar não aprova mudança em produção (R10.4)."}, actor.id)
         return self._record(hid)
+
+    # ---- pacote de mudança para engenharia (R10.2, R11, R12 na forma do MVP) ------------
+    def generate_change_package(self, actor: Actor, hid: str) -> dict:
+        """Só depois de uma decisão de aceite; determinístico e idempotente por decisão (R10.3)."""
+        from .domain import change_package as cp
+
+        actor.require(ROLES_WRITE, "gerar o pacote de mudança")
+        rec = self._record(hid)
+        if not rec["decisions"] or rec["decisions"][-1]["outcome"] != "accept":
+            raise Conflict("O pacote só é gerado depois de uma decisão de aceite (a última decisão precisa ser 'aceitar')")
+        decision = rec["decisions"][-1]
+        done = next((p for p in rec["changePackages"] if p["decisionId"] == decision["decisionId"]), None)
+        if done:
+            return self.change_package(actor, hid, done["packageId"])
+        sc = rec["scenarios"][-1]
+        execs = [e for e in rec["executions"] if e.get("jobState") == "done" and e.get("status") == "ok"
+                 and {k: float(v) for k, v in (e.get("overrides") or {}).items()} == {k: float(v) for k, v in sc["overrides"].items()}]
+        if not execs:
+            raise Conflict("Simule o cenário confirmado antes de gerar o pacote: falta uma execução com evidência")
+        ev = execs[-1]
+        full = self.kv.get(f"exec#{ev['executionId']}") or {}
+        if not full.get("rows"):
+            raise Conflict(f"A execução {ev['executionId']} não tem as linhas guardadas para derivar os testes")
+        patch = cp.build_patch(self.model, sc["overrides"])
+        tests = cp.build_tests(self.model, full["rows"])
+        verification = cp.verify(self.model, patch, tests)
+        comparison = full.get("comparison") or ev.get("comparison")
+        manifest = {
+            "packageVersion": cp.PACKAGE_VERSION, "hypothesisId": hid, "intent": rec["hypothesis"]["intent"],
+            "scenario": {"scenarioId": sc["scenarioId"], "overrides": sc["overrides"],
+                         "confirmedBy": sc.get("confirmedBy"), "confirmedAt": sc.get("confirmedAt")},
+            "evidence": {"executionId": ev["executionId"], "mode": "SIMULADO", "source": ev.get("source", "deterministic"),
+                         "deltas": engine.deltas(comparison)},
+            "findingsAccepted": [{"findingId": f["findingId"], "title": f.get("title"), "source": f.get("source"),
+                                  "evidenceLevel": f.get("evidenceLevel")}
+                                 for f in rec["findings"] if f.get("investigationState") == "accepted"],
+            "decision": {k: decision.get(k) for k in ("decisionId", "outcome", "rationale", "decidedBy", "decidedAt", "evidenceRefs")},
+            "versions": {"policy": self.model.policy_version, "dataset": self.model.dataset_version,
+                         "runner": engine.RUNNER_VERSION, "patchedPolicy": verification["patchedPolicyVersion"]},
+        }
+        body = {"manifest": manifest, "patch": patch, "tests": tests, "verification": verification}
+        body["pullRequest"] = cp.pr_preview(self.model, manifest, patch, tests, verification)
+        body["testFile"] = {"path": f"app/backend/tests/generated/test_change_{hid}.py",
+                            "content": cp.pytest_source(self.model, hid, patch, tests)}
+        pid = cp.package_id(body)
+        at, _ = _now()
+        package = {"packageId": pid, "status": "nao_submetido", "generatedAt": at, "generatedBy": actor.id, **body}
+        self.kv.put(f"change#{hid}#{pid}", package)
+        self._emit(hid, "ChangePackageGenerated", {
+            "packageId": pid, "decisionId": decision["decisionId"], "scenarioId": sc["scenarioId"],
+            "executionId": ev["executionId"], "testsPassed": verification["passed"], "testsTotal": verification["total"],
+            "changes": [op["_meta"] for op in patch if op["op"] == "replace"], "status": "nao_submetido"}, actor.id)
+        return package
+
+    def change_package(self, actor: Actor, hid: str, pid: str) -> dict:
+        actor.require(ROLES_READ, "ver o pacote de mudança")
+        pkg = self.kv.get(f"change#{hid}#{pid}")
+        if not pkg:
+            raise NotFound(f"Pacote {pid} não encontrado")
+        return pkg
 
     # ---- leitura --------------------------------------------------------------------
     def hypothesis(self, actor: Actor, hid: str) -> dict:

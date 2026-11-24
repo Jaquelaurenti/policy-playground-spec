@@ -207,6 +207,16 @@ def create_app(pg: Playground | None = None) -> FastAPI:
     if mcp_app is not None:
         app.mount("/mcp", mcp_app)
 
+    @app.post("/api/hypotheses/{hid}/change-package")
+    def gen_package(hid: str, request: Request, idem: str | None = Header(None, alias="Idempotency-Key")):
+        """Pacote de mudança para engenharia (NÃO SUBMETIDO), só após decisão de aceite."""
+        a, p = actor(request), playground()
+        return p.idempotent(idem, f"{hid}#package", lambda: p.generate_change_package(a, hid))
+
+    @app.get("/api/hypotheses/{hid}/change-package/{pid}")
+    def get_package(hid: str, pid: str, request: Request):
+        return playground().change_package(actor(request), hid, pid)
+
     @app.post("/events")
     async def lambda_events(request: Request):
         """Jobs assíncronos: a Lambda se invoca com {"ppJob": {...}} e o Web Adapter entrega aqui."""

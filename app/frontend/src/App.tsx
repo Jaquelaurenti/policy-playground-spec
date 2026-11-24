@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, poll, setDemoIdentity, type Json } from "./api";
 import { AgentPanel } from "./AgentPanel";
+import { ChangePackagePanel } from "./ChangePackagePanel";
 import { completeLogin, getConfig, login, logout, tokenClaims, type AppConfig } from "./auth";
 import PolicyGraph, { AREA_COLOR } from "./PolicyGraph";
 import {
@@ -200,12 +201,13 @@ function Composer({ policy, canWrite, busy, roleLabel, onCreate }: {
   );
 }
 
-const STEPS = ["Descrever", "Conferir e simular", "Ver impacto", "Investigar mais", "Decidir"];
+const STEPS = ["Descrever", "Conferir e simular", "Ver impacto", "Investigar mais", "Decidir", "Pacote para engenharia"];
 const HINT: Record<number, string> = {
   2: "Confira o parâmetro e o novo valor abaixo. Se estiver certo, clique em Simular cenário.",
   3: "Veja o impacto abaixo. Depois, peça sugestões do que mais analisar ou registre sua decisão no fim da página.",
   4: "Analise as sugestões e, quando tiver segurança, registre a decisão no fim da página.",
-  5: "Decisão registrada. Você pode ajustar o cenário, simular de novo e registrar uma nova decisão.",
+  5: "Decisão registrada. Se aceitou, gere o pacote para engenharia no fim da página.",
+  6: "Pacote gerado: mudança, testes conferidos e prévia do PR prontos para revisão da engenharia.",
 };
 
 function Investigation({ policy, rec, canWrite, canDecide, busy, run, refresh, setFocus }: {
@@ -225,7 +227,7 @@ function Investigation({ policy, rec, canWrite, canDecide, busy, run, refresh, s
   const lastExec = rec.executions.filter((e: Json) => !e.findingId && e.source !== "agent").at(-1);   // execuções do agente aparecem no painel dele
   useEffect(() => { if (lastExec?.jobState === "done") api.execution(lastExec.executionId).then(setExecution); }, [lastExec?.executionId, lastExec?.jobState]);
 
-  const step = rec.decisions.length ? 5 : rec.findings.length ? 4 : lastExec?.jobState === "done" ? 3 : 2;
+  const step = rec.changePackages?.length ? 6 : rec.decisions.length ? 5 : rec.findings.length ? 4 : lastExec?.jobState === "done" ? 3 : 2;
   const inRange = param && value >= param.domain.min && value <= param.domain.max;
   const changed = param && value !== param.value;
 
@@ -286,6 +288,7 @@ function Investigation({ policy, rec, canWrite, canDecide, busy, run, refresh, s
       {lastExec && <AgentPanel rec={rec} canWrite={canWrite} refresh={refresh} />}
       {lastExec && <Findings policy={policy} rec={rec} canWrite={canWrite} busy={busy} run={run} refresh={refresh} setFocus={setFocus} />}
       {lastExec && <Decisions rec={rec} canDecide={canDecide} busy={busy} run={run} refresh={refresh} />}
+      {lastExec && <ChangePackagePanel rec={rec} canWrite={canWrite} refresh={refresh} />}
 
       <details className="more">
         <summary>Histórico e detalhes técnicos</summary>

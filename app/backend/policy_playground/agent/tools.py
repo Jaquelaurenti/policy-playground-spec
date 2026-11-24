@@ -13,6 +13,7 @@ import uuid
 
 from ..domain import engine, generators
 from ..domain.engine import CannotCalculate
+from ..domain.engine import deltas as _deltas
 from ..roles import ROLES_READ, ROLES_WRITE, Actor, Forbidden
 
 _IDS = re.compile(r"\b(?:[RPEF]-?[0-9a-f]{3,8}|[RP]\d{3})\b")   # ids de regra/parâmetro/execução/achado
@@ -253,21 +254,6 @@ class ToolRegistry:
              "evidenceLevel": "simulated", "state": "suggested", "createdBy": self.actor.id}
         self.findings.append(f)
         return {"findingId": f["findingId"], "state": "suggested", "awaits": "revisão humana"}
-
-
-def _deltas(cmp: dict) -> dict:
-    """Variações já calculadas pelo motor, para o agente não fazer aritmética (evita 'de 1 para 5' virar '5 novas')."""
-    out = {}
-    for o, v in cmp["outputs"].items():
-        if v["type"] == "category":
-            cats = sorted(set(v["baseline"]) | set(v["scenario"]))
-            out[o] = {c: {"de": v["baseline"].get(c, 0), "para": v["scenario"].get(c, 0),
-                          "delta": v["scenario"].get(c, 0) - v["baseline"].get(c, 0)} for c in cats}
-        else:
-            out[o] = {"de": v["baselineSum"], "para": v["scenarioSum"], "delta": v["scenarioSum"] - v["baselineSum"]}
-    out["motivos"] = {code: {"nome": m["name"], "de": m["baseline"], "para": m["scenario"],
-                             "delta": m["scenario"] - m["baseline"]} for code, m in cmp["motivos"].items()}
-    return out
 
 
 def _evidence(ex: dict) -> dict:

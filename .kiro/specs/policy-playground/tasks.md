@@ -307,6 +307,12 @@ Five fronts, one owner each (four people: front 5 is shared). Tasks 25 and 26 ar
   - Source for each number in `docs/working-backwards.md`, or label it as an estimate with its assumptions; in-app hypothesis-to-evidence time measured live against the baseline; cost per investigation; pitch script with one speaker per section and a timed rehearsal
   - _Requirements: Primary-objective NFR 1–3, NFR FinOps_
 
+- [x] 28.2 Generate the change package for engineering after an accept decision (R10.2, R11, R12 in MVP form)
+  - `domain/change_package.py`: JSON Patch over the Policy Spec (with a `test` op that fails if the spec changed), one regression case per synthetic record from the accepted execution, independent verification (patch applied to a copy of the policy and full recomputation by the engine), traceability manifest, PR preview labeled NOT SUBMITTED, and a pytest file the engineering team can run
+  - `POST /api/hypotheses/{id}/change-package` (Policy Specialist only, requires the latest decision to be `accept`, idempotent per decision) and `GET .../change-package/{packageId}`; event `ChangePackageGenerated`; UI panel "Pacote para engenharia" with download of the package and of the tests
+  - Tests: no package without accept; package content and 12/12 verification for the worked example; idempotent per decision; deterministic; role checks; patch refuses a changed spec; verification catches a wrong expectation
+  - _Requirements: R10.2–R10.4, R11.2, R12.2–R12.4 (MVP form, no real PR: OQ-9); design §9.2_
+
 - [ ] 29. Validate the agent flow on the deployed stack (before 12:35 COT / 14:35 BRT)
   - Demo flow: intent "aumentar a renda mínima para 3000" → confirm `P001=3000` → agent states the plan, investigates with ≥ 1 sensitivity run and a comparison → ≥ 1 finding bound to an execution → recommendation → human decision with the evidence on screen
   - Run three times on the deployed URL; record steps, tokens and latency; rehearse plan B (model disabled → G1/G2); update `tasks.md` and README
