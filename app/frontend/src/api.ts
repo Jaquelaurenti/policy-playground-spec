@@ -64,6 +64,7 @@ export const api = {
   transition: (id: string, fid: string, to: string, reason?: string) =>
     call("POST", `/api/hypotheses/${id}/findings/${fid}/transitions`, { to, reason }),
   executeFinding: (id: string, fid: string) => call("POST", `/api/hypotheses/${id}/findings/${fid}/executions`),
+  runFindingScenario: (id: string, fid: string) => call("POST", `/api/hypotheses/${id}/findings/${fid}/scenario-executions`),
   assess: (id: string, fid: string, relevant: boolean) => call("POST", `/api/hypotheses/${id}/findings/${fid}/assessments`, { relevant }),
   decide: (id: string, outcome: string, rationale: string, evidenceRefs: string[]) =>
     call("POST", `/api/hypotheses/${id}/decisions`, { outcome, rationale, evidenceRefs }),

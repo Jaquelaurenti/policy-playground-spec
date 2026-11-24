@@ -130,3 +130,7 @@ details.more > summary { color: var(--blue); font-size: 14px; }
 .agent-timeline li.tool { list-style: "🛠  "; }
 .agent-timeline li.tool.error { list-style: "↩  "; }
 .agent-timeline li.tool.error b { color: var(--red); }
+
+/* Achado → cenário (R9) e evidência no card */
+.scenario-note { margin: 0 0 6px; font-size: 13.5px; padding: 6px 10px; border-radius: 8px; background: var(--blue-soft); }
+.evidence { margin: 6px 0 10px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }

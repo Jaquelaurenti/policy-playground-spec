@@ -39,6 +39,24 @@ class Interval:
         return f"{'[' if self.lo_inc else '('}{lo}, {hi}{']' if self.hi_inc else ')'}"
 
 
+def slice_of(variable: str, intervals: list[Interval]) -> dict:
+    """Recorte de população serializável: quem tem `variable` dentro de algum dos intervalos."""
+    enc = lambda x: None if math.isinf(x) else x
+    return {"variable": variable, "label": f"{variable} ∈ " + " ∪ ".join(str(i) for i in intervals),
+            "intervals": [{"lo": enc(i.lo), "loInc": i.lo_inc, "hi": enc(i.hi), "hiInc": i.hi_inc} for i in intervals]}
+
+
+def in_slice(value, sl: dict) -> bool:
+    if value is None:
+        return False
+    for i in sl["intervals"]:
+        lo = -math.inf if i["lo"] is None else i["lo"]
+        hi = math.inf if i["hi"] is None else i["hi"]
+        if (value > lo or (i["loInc"] and value == lo)) and (value < hi or (i["hiInc"] and value == hi)):
+            return True
+    return False
+
+
 def _cmp_interval(op: str, value: float) -> list[Interval]:
     return {">=": [Interval(value, True)], ">": [Interval(value, False)], "<=": [Interval(hi=value, hi_inc=True)],
             "<": [Interval(hi=value, hi_inc=False)], "=": [Interval(value, True, value, True)]}.get(op, [Interval()])
@@ -155,7 +173,10 @@ def g2_reachability(model: PolicyModel, overrides: dict) -> list[dict]:
                                                 "approvalBaseline": [str(i) for i in cons_b],
                                                 "approvalScenario": [str(i) for i in cons_s],
                                                 "reachableBaseline": [str(i) for i in reach_b],
-                                                "reachableScenario": [str(i) for i in reach_s]}})
+                                                "reachableScenario": [str(i) for i in reach_s]},
+                            # R9: o achado vira cenário próprio = o mesmo cenário, olhando só quem está na faixa que muda
+                            "proposedScenario": {"overrides": {p: float(v) for p, v in overrides.items()},
+                                                 "slice": slice_of(var, reach_b or reach_s)}})
     return out
 
 

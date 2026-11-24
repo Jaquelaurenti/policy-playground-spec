@@ -183,7 +183,8 @@ Tasks that depend on real credit-policy platform access or on an open question a
   - Unit tests: with no assessments the feedback term is 0.5 for every kind; recorded assessments change the order as expected; the cap is applied after ranking
   - _Requirements: R8.2, R8.4, R8.6; design §10.2, §10.3_
 
-- [ ] 13. Implement finding → investigable scenario
+- [x] 13. Implement finding → investigable scenario
+  - Implemented (1.3): agent findings propose the variation they simulated (`proposedScenario.overrides`); G2 findings propose the confirmed scenario over a population slice (`proposedScenario.slice`, e.g. `renda_mensal ∈ [2500, 3000)`); text suggestions without a parameter only link evidence from the confirmed scenario. `POST /findings/{id}/scenario-executions` confirms the derived scenario (explicit click, R9.3) and runs it; derived scenarios never replace the main one, and the change package uses the scenario of the decision
   - Turn a relevant finding into a scenario that goes through the same confirmation + execution + evidence path; default to explicit specialist action to launch execution (OQ-8 default)
   - Unit tests: a finding-derived scenario routes through confirmation/execution/evidence like any other; no auto-advance to a committed change
   - _Requirements: R9.1, R9.2, R9.3; design §10, §11_

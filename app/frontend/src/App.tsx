@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, poll, setDemoIdentity, type Json } from "./api";
 import { AgentPanel } from "./AgentPanel";
 import { ChangePackagePanel } from "./ChangePackagePanel";
+import { EvidencePanel, scenarioText } from "./FindingEvidence";
 import { completeLogin, getConfig, login, logout, tokenClaims, type AppConfig } from "./auth";
 import PolicyGraph, { AREA_COLOR } from "./PolicyGraph";
 import {
@@ -217,7 +218,7 @@ function Investigation({ policy, rec, canWrite, canDecide, busy, run, refresh, s
   const hid = h.hypothesisId;
   const proposal = h.structuring;
   const editable = policy.parameters.filter((p: Json) => p.editable);
-  const lastScenario = rec.scenarios.at(-1);
+  const lastScenario = rec.scenarios.filter((s: Json) => !s.derivedFromFinding).at(-1);   // cenários de achados ficam nos cards
   const initialParam = proposal.parameterId || Object.keys(h.proposedOverrides)[0] || (lastScenario && Object.keys(lastScenario.overrides)[0]) || editable[0]?.id;
   const [paramId, setParamId] = useState<string>(initialParam);
   const param = policy.parameters.find((p: Json) => p.id === paramId);
@@ -380,10 +381,15 @@ function Findings({ policy, rec, canWrite, busy, run, refresh, setFocus }: { pol
   });
   const lastJob = rec.suggestionJobs.at(-1);
   const act = (label: string, fn: () => Promise<unknown>) => run(label, async () => { await fn(); await refresh(); });
-  const execFinding = (fid: string) => run("Simulando…", async () => {
-    const r = await api.executeFinding(hid, fid);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (fid: string) => setOpen((s) => { const n = new Set(s); if (n.has(fid)) n.delete(fid); else n.add(fid); return n; });
+  const mainScenario = rec.scenarios.filter((s: Json) => !s.derivedFromFinding).at(-1);
+  const mainExec = rec.executions.filter((e: Json) => !e.findingId && e.source !== "agent" && e.jobState === "done").at(-1);
+  const execFinding = (fid: string, own: boolean) => run("Simulando…", async () => {
+    const r = own ? await api.runFindingScenario(hid, fid) : await api.executeFinding(hid, fid);
     await poll(() => api.execution(r.executionId), (x: Json) => x.jobState === "done");
     await refresh();
+    setOpen((s) => new Set(s).add(fid));
   });
   return (
     <section className="section">
@@ -406,9 +412,17 @@ function Findings({ policy, rec, canWrite, busy, run, refresh, setFocus }: { pol
           <p style={{ margin: "8px 0 4px" }}><b>{f.title}</b></p>
           <p style={{ margin: 0, fontSize: 14 }}>{f.text}</p>
           <p className="muted" style={{ margin: "6px 0" }}>Regras envolvidas: {f.ruleRefs.map((id: string) => ruleName(policy, id)).join(", ")}</p>
+          {f.proposedScenario
+            ? <p className="scenario-note"><b>Cenário do achado:</b> {scenarioText(policy, f.proposedScenario)}</p>
+            : <p className="muted" style={{ margin: "0 0 6px" }}>Sem cenário próprio: a evidência usa o cenário confirmado ({scenarioText(policy, mainScenario)}).</p>}
+          {f.currentExecutionId && <button className="ghost" style={{ padding: "4px 0" }} onClick={() => toggle(f.findingId)}>
+            {open.has(f.findingId) ? "▾ Ocultar evidência" : "▸ Ver evidência"}</button>}
+          {f.currentExecutionId && open.has(f.findingId) && <EvidencePanel policy={policy} executionId={f.currentExecutionId} mainExec={mainExec} />}
           {canWrite && <div className="row">
-            {f.investigationState === "suggested" && <button disabled={!!busy} onClick={() => act("Atualizando…", () => api.transition(hid, f.findingId, "under_investigation"))}>Analisar</button>}
-            {f.investigationState === "under_investigation" && <button disabled={!!busy} className="primary" onClick={() => execFinding(f.findingId)}>Simular este ponto</button>}
+            {f.proposedScenario && ["suggested", "under_investigation"].includes(f.investigationState) &&
+              <button disabled={!!busy} className="primary" onClick={() => execFinding(f.findingId, true)}>Confirmar e simular este cenário</button>}
+            {!f.proposedScenario && f.investigationState === "suggested" && <button disabled={!!busy} onClick={() => act("Atualizando…", () => api.transition(hid, f.findingId, "under_investigation"))}>Analisar</button>}
+            {!f.proposedScenario && f.investigationState === "under_investigation" && <button disabled={!!busy} className="primary" onClick={() => execFinding(f.findingId, false)}>Vincular evidência</button>}
             {f.investigationState === "executed" && <button disabled={!!busy} className="primary" onClick={() => act("Atualizando…", () => api.transition(hid, f.findingId, "accepted", "Aceito após ver a evidência"))}>Aceitar</button>}
             {["executed", "accepted"].includes(f.investigationState) && <button disabled={!!busy} className="ghost" onClick={() => act("Atualizando…", () => api.transition(hid, f.findingId, "under_investigation", "Reabrir"))}>Reabrir</button>}
             {["suggested", "under_investigation", "executed"].includes(f.investigationState) && <button disabled={!!busy} className="ghost" onClick={() => act("Atualizando…", () => api.transition(hid, f.findingId, "rejected", "Descartado"))}>Descartar</button>}

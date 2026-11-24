@@ -146,9 +146,10 @@ def required_for_output(model: PolicyModel, output_var: str) -> list[str]:
 
 # ---- execução simulada -------------------------------------------------------------
 
-def idempotency_key(model: PolicyModel, overrides: dict[str, float]) -> str:
+def idempotency_key(model: PolicyModel, overrides: dict[str, float], slice_: dict | None = None) -> str:
     norm = sorted((k, float(v)) for k, v in overrides.items())   # 3000 e 3000.0 são o mesmo cenário
-    raw = json.dumps([model.policy_version, norm, model.dataset_version, RUNNER_VERSION])
+    raw = json.dumps([model.policy_version, norm, model.dataset_version, RUNNER_VERSION]
+                     + ([slice_["variable"], slice_["intervals"]] if slice_ else []), sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -159,8 +160,10 @@ def overrides_to_params(model: PolicyModel, overrides: dict[str, float]) -> dict
     return params
 
 
-def simulate(model: PolicyModel, overrides: dict[str, float]) -> dict:
-    """Roda baseline e cenário sobre o dataset sintético. Sempre mode=SIMULADO."""
+def simulate(model: PolicyModel, overrides: dict[str, float], slice_: dict | None = None) -> dict:
+    """Roda baseline e cenário sobre o dataset sintético. Sempre mode=SIMULADO.
+    Com `slice_`, só entram as propostas cujo valor da variável no baseline cai no recorte (R9, achado G2)."""
+    from .generators import in_slice
     if not model.report.can_execute:
         raise CannotCalculate("Validação bloqueia a execução: " + "; ".join(model.report.extension_errors + model.report.dataset_errors))
     sub = affected_subdag(model, list(overrides))
@@ -169,12 +172,17 @@ def simulate(model: PolicyModel, overrides: dict[str, float]) -> dict:
     for rec in model.dataset["records"]:
         payload = {k: v for k, v in rec.items() if k not in ("record_id", "cobertura")}
         base = run_record(model, payload, base_params)
+        if slice_ and not in_slice(base.get(slice_["variable"]), slice_):
+            continue
         scen = run_record(model, payload, scen_params, only=set(sub.execution_set), base_env=base)
         rows.append({"recordId": rec["record_id"], "cobertura": rec.get("cobertura"),
                      "baseline": {o: base.get(o) for o in model.output_vars},
                      "scenario": {o: scen.get(o) for o in model.output_vars},
                      "baselineMotivos": _motivos_hit(model, base), "scenarioMotivos": _motivos_hit(model, scen)})
-    return {"rows": rows, "subDag": sub.as_dict(), "comparison": compare(model, rows)}
+    out = {"rows": rows, "subDag": sub.as_dict(), "comparison": compare(model, rows)}
+    if slice_:
+        out["slice"] = slice_
+    return out
 
 
 def _motivos_hit(model: PolicyModel, env: dict) -> list[int]:

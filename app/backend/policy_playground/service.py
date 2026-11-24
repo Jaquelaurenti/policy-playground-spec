@@ -45,6 +45,12 @@ def _now():
 _ALLOWED_TOKENS = re.compile(r"\b[RP]\d{3}\b")
 
 
+def _main_scenario(rec: dict) -> dict | None:
+    """Último cenário confirmado pelo especialista que NÃO veio de um achado (R9 cria cenários derivados)."""
+    main = [s for s in rec["scenarios"] if not s.get("derivedFromFinding")]
+    return main[-1] if main else None
+
+
 def _clip(obj, limit: int = 400):
     """Entrada de tool resumida para o evento (a trilha não precisa do texto inteiro)."""
     s = json.dumps(obj, ensure_ascii=False)
@@ -141,11 +147,12 @@ class Playground:
         rec = self._record(hid)
         if not rec["scenarios"]:
             raise Conflict("Confirme um cenário antes de executar")
-        sc = next((s for s in rec["scenarios"] if s["scenarioId"] == scenario_id), rec["scenarios"][-1])
-        key = engine.idempotency_key(self.model, sc["overrides"])
+        sc = next((s for s in rec["scenarios"] if s["scenarioId"] == scenario_id), None) or _main_scenario(rec)
+        key = engine.idempotency_key(self.model, sc["overrides"], sc.get("slice"))
         attempt = 1 + sum(1 for e in rec["executions"] if e.get("scenarioId") == sc["scenarioId"])
         eid = "E-" + uuid.uuid4().hex[:8]
-        data = {"executionId": eid, "scenarioId": sc["scenarioId"], "overrides": sc["overrides"], "idempotencyKey": key,
+        data = {"executionId": eid, "scenarioId": sc["scenarioId"], "overrides": sc["overrides"], "slice": sc.get("slice"),
+                "idempotencyKey": key,
                 "attempt": attempt, "findingId": finding_id, "policyVersion": self.model.policy_version,
                 "datasetVersion": self.model.dataset_version, "runnerVersion": engine.RUNNER_VERSION}
         self._emit(hid, "ExecutionRequested", data, actor.id)
@@ -165,7 +172,7 @@ class Playground:
         else:
             reused = False
             try:
-                out = engine.simulate(self.model, ex["overrides"])
+                out = engine.simulate(self.model, ex["overrides"], ex.get("slice"))
                 result = {"status": "ok", "mode": "SIMULADO", "source": "deterministic", **out}
                 self.kv.put_if_absent(f"result#{ex['idempotencyKey']}", result)
             except engine.CannotCalculate as e:
@@ -196,7 +203,7 @@ class Playground:
         if len(rec["suggestionJobs"]) >= self.cfg.max_suggestion_requests:
             raise Conflict(f"Limite de {self.cfg.max_suggestion_requests} pedidos de investigação por hipótese atingido (FinOps)")
         jid = "J-" + uuid.uuid4().hex[:8]
-        self._emit(hid, "SuggestionsRequested", {"jobId": jid, "scenarioId": rec["scenarios"][-1]["scenarioId"]}, actor.id)
+        self._emit(hid, "SuggestionsRequested", {"jobId": jid, "scenarioId": _main_scenario(rec)["scenarioId"]}, actor.id)
         self.dispatcher.dispatch({"kind": "suggestions", "hypothesisId": hid, "jobId": jid, "actor": actor.id})
         return {"jobId": jid, "state": "pending"}
 
@@ -205,7 +212,8 @@ class Playground:
         rec = self._record(hid)
         if any(j["jobId"] == jid and j["state"] == "done" for j in rec["suggestionJobs"]):
             return
-        sc = rec["scenarios"][-1]
+        sc = next((s for s in rec["scenarios"] if s["scenarioId"] == next(
+            (j["scenarioId"] for j in rec["suggestionJobs"] if j["jobId"] == jid), None)), None) or _main_scenario(rec)
         ov = sc["overrides"]
         cands = generators.g1_shared_input(self.model, ov) + generators.g2_reachability(self.model, ov)
         tokens, model_status = 0, "ok"
@@ -247,7 +255,7 @@ class Playground:
             return {"jobId": running[-1]["jobId"], "state": running[-1]["state"]}
         if len(rec["investigations"]) >= self.cfg.agent_max_runs:
             raise Conflict(f"Limite de {self.cfg.agent_max_runs} investigações do agente por hipótese atingido (FinOps)")
-        sc = rec["scenarios"][-1]
+        sc = _main_scenario(rec)
         jid = "J-" + uuid.uuid4().hex[:8]
         self._emit(hid, "InvestigationRequested", {"jobId": jid, "scenarioId": sc["scenarioId"],
                                                    "overrides": sc["overrides"], "model": self.ai.name}, actor.id)
@@ -292,8 +300,12 @@ class Playground:
                                             "rows": ex.get("rows")})
                 sent["execs"].add(eid)
             for f in r.findings[sent["findings"]:]:
-                self._emit(hid, "FindingSuggested", {**f, "jobId": jid, "hypothesisId": hid,
-                                                     "scenarioId": sc["scenarioId"]}, "agent")
+                main_ov = {k: float(v) for k, v in sc["overrides"].items()}
+                variation = next((r.executions[e]["overrides"] for e in f["executionIds"] if e in r.executions
+                                  and {k: float(v) for k, v in r.executions[e]["overrides"].items()} != main_ov), None)
+                self._emit(hid, "FindingSuggested", {**f, "jobId": jid, "hypothesisId": hid, "scenarioId": sc["scenarioId"],
+                                                     "proposedScenario": {"overrides": variation} if variation else None},
+                           "agent")
             sent["findings"] = len(r.findings)
 
         mcp_client = None
@@ -353,7 +365,36 @@ class Playground:
         f = self._finding(hid, fid)
         if f["investigationState"] != "under_investigation":
             raise InvalidTransition("Coloque o finding em investigação antes de executar")
-        return self.request_execution(actor, hid, f.get("scenarioId"), finding_id=fid)
+        return self.request_execution(actor, hid, _main_scenario(self._record(hid))["scenarioId"], finding_id=fid)
+
+    def run_finding_scenario(self, actor: Actor, hid: str, fid: str) -> dict:
+        """R9: confirma o cenário próprio do achado (gate humano: este clique) e o simula pelo mesmo caminho."""
+        actor.require(ROLES_WRITE, "simular o cenário de um achado")
+        f = self._finding(hid, fid)
+        ps = f.get("proposedScenario")
+        if not ps:
+            raise Conflict("Este achado não tem cenário próprio: use 'Vincular evidência' com o cenário confirmado")
+        if f["investigationState"] == "suggested":
+            self._emit(hid, "FindingTransitioned", {"findingId": fid, "to": "under_investigation",
+                                                    "reason": "Cenário do achado confirmado"}, actor.id)
+        elif f["investigationState"] not in ("under_investigation", "executed", "accepted"):
+            raise InvalidTransition("Reabra o achado antes de simular o cenário dele")
+        elif f["investigationState"] in ("executed", "accepted"):
+            self._emit(hid, "FindingTransitioned", {"findingId": fid, "to": "under_investigation",
+                                                    "reason": "Nova simulação do cenário do achado"}, actor.id)
+        ov = validate_overrides(self.model, ps["overrides"]) if not ps.get("slice") else \
+            {k: float(v) for k, v in ps["overrides"].items() if k in self.model.parameters}
+        rec = self._record(hid)
+        existing = next((s for s in rec["scenarios"] if s.get("derivedFromFinding") == fid), None)
+        if existing:
+            sid = existing["scenarioId"]
+        else:
+            sid = f"S-{len(rec['scenarios']) + 1}"
+            self._emit(hid, "ScenarioConfirmed", {"scenarioId": sid, "baselineVersion": self.model.policy_version,
+                                                  "overrides": ov, "slice": ps.get("slice"), "derivedFromFinding": fid,
+                                                  "affectedSubDag": engine.affected_subdag(self.model, list(ov)).as_dict()},
+                       actor.id)
+        return self.request_execution(actor, hid, sid, finding_id=fid)
 
     def assess(self, actor: Actor, hid: str, fid: str, relevant: bool) -> dict:
         actor.require(ROLES_WRITE, "avaliar findings")
@@ -362,16 +403,20 @@ class Playground:
                                             "kind": f.get("generator") or "ai_suggestion"}, actor.id)
         return self._record(hid)
 
-    def decide(self, actor: Actor, hid: str, outcome: str, rationale: str, evidence_refs: list[str]) -> dict:
+    def decide(self, actor: Actor, hid: str, outcome: str, rationale: str, evidence_refs: list[str],
+               scenario_id: str | None = None) -> dict:
         actor.require(ROLES_DECIDE, "registrar decisões")
         if outcome not in DECISION_OUTCOMES:
             raise ValueError(f"Decisão deve ser uma de {sorted(DECISION_OUTCOMES)}")
         if not (rationale or "").strip():
             raise ValueError("A justificativa é obrigatória")
         rec = self._record(hid)
+        main = _main_scenario(rec)
+        scenario_id = scenario_id or (main["scenarioId"] if main else None)
         prev = rec["decisions"][-1]["decisionId"] if rec["decisions"] else None
         self._emit(hid, "DecisionRecorded", {"decisionId": "D-" + uuid.uuid4().hex[:8], "outcome": outcome,
                                              "rationale": rationale.strip(), "evidenceRefs": evidence_refs or [],
+                                             "scenarioId": scenario_id,
                                              "supersedes": prev,
                                              "note": "Aceitar não aprova mudança em produção (R10.4)."}, actor.id)
         return self._record(hid)
@@ -389,8 +434,11 @@ class Playground:
         done = next((p for p in rec["changePackages"] if p["decisionId"] == decision["decisionId"]), None)
         if done:
             return self.change_package(actor, hid, done["packageId"])
-        sc = rec["scenarios"][-1]
+        sc = next((s for s in rec["scenarios"] if s["scenarioId"] == decision.get("scenarioId")), None) or _main_scenario(rec)
+        if sc.get("slice"):
+            raise Conflict("Um recorte de população não é uma mudança de política: decida sobre um cenário de parâmetro")
         execs = [e for e in rec["executions"] if e.get("jobState") == "done" and e.get("status") == "ok"
+                 and not e.get("slice")                   # evidência do pacote cobre todas as propostas
                  and {k: float(v) for k, v in (e.get("overrides") or {}).items()} == {k: float(v) for k, v in sc["overrides"].items()}]
         if not execs:
             raise Conflict("Simule o cenário confirmado antes de gerar o pacote: falta uma execução com evidência")

@@ -193,6 +193,12 @@ def create_app(pg: Playground | None = None) -> FastAPI:
         a, p = actor(request), playground()
         return p.idempotent(idem, f"{fid}#exec", lambda: p.execute_finding(a, hid, fid))
 
+    @app.post("/api/hypotheses/{hid}/findings/{fid}/scenario-executions")
+    def run_finding_scenario(hid: str, fid: str, request: Request, idem: str | None = Header(None, alias="Idempotency-Key")):
+        """R9: confirma o cenário próprio do achado e o simula (variação do agente ou recorte do G2)."""
+        a, p = actor(request), playground()
+        return p.idempotent(idem, f"{fid}#scenario", lambda: p.run_finding_scenario(a, hid, fid))
+
     @app.post("/api/hypotheses/{hid}/findings/{fid}/assessments")
     def assess(hid: str, fid: str, request: Request, body: dict = Body(...), idem: str | None = Header(None, alias="Idempotency-Key")):
         a, p = actor(request), playground()
@@ -202,7 +208,7 @@ def create_app(pg: Playground | None = None) -> FastAPI:
     def decide(hid: str, request: Request, body: dict = Body(...), idem: str | None = Header(None, alias="Idempotency-Key")):
         a, p = actor(request), playground()
         return p.idempotent(idem, f"{hid}#decide", lambda: p.decide(a, hid, body.get("outcome", ""), body.get("rationale", ""),
-                                                                   body.get("evidenceRefs", [])))
+                                                                   body.get("evidenceRefs", []), body.get("scenarioId")))
 
     if mcp_app is not None:
         app.mount("/mcp", mcp_app)
