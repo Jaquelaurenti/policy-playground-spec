@@ -1,0 +1,377 @@
+<title>Policy Playground na AWS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: uma coluna de leitura; os diagramas ocupam a largura e rolam sozinhos no celular. */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --zone: #eaf0f4; --fg: #15202b; --muted: #56626e; --line: #c9d2da;
+  --accent: #0a746f; --accent-soft: #dff1ef; --gate: #a5560a; --gate-soft: #fbeedd;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1418; --surface: #151d23; --zone: #121a20; --fg: #e4eaee; --muted: #9aa6b0; --line: #2d3943;
+  --accent: #46c4ba; --accent-soft: #123331; --gate: #f2a24e; --gate-soft: #3a2a17; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e1418; --surface: #151d23; --zone: #121a20; --fg: #e4eaee; --muted: #9aa6b0; --line: #2d3943;
+  --accent: #46c4ba; --accent-soft: #123331; --gate: #f2a24e; --gate-soft: #3a2a17; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 6px; margin-bottom: 28px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.15; margin: 0; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 21px; margin: 0; text-wrap: balance; }
+.lede { max-width: 70ch; color: var(--muted); margin: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fact { font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; background: var(--surface); }
+section { display: grid; gap: 12px; margin-top: 36px; }
+section > p { margin: 0; max-width: 72ch; color: var(--muted); }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.scroll { overflow-x: auto; }
+.scroll svg { display: block; width: 100%; min-width: 900px; height: auto; color: var(--fg); }
+figcaption { font-size: 13px; color: var(--muted); margin-top: 10px; max-width: 80ch; }
+
+/* SVG */
+svg text { font-family: var(--sans); fill: currentColor; font-size: 12.5px; }
+svg .t-title { font-weight: 600; font-size: 13.5px; }
+svg .t-sub { fill: var(--muted); font-size: 11.5px; }
+svg .t-mono { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+svg .t-zone { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; fill: var(--muted); text-transform: uppercase; }
+svg .t-edge { fill: var(--muted); font-size: 11px; }
+svg .t-acc { fill: var(--accent); font-weight: 600; }
+svg .t-gate { fill: var(--gate); font-weight: 600; font-size: 11px; }
+svg .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg .persona { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; }
+svg .zone { fill: var(--zone); stroke: var(--line); stroke-dasharray: 5 4; }
+svg .group { fill: none; stroke: var(--line); stroke-dasharray: 3 4; }
+svg .acc-box { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+svg .gate-box { fill: var(--gate-soft); stroke: var(--gate); stroke-width: 1.6; }
+svg .edge { fill: none; stroke: currentColor; stroke-width: 1.3; opacity: .75; }
+svg .edge-dash { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 4 4; opacity: .6; }
+svg .edge-acc { fill: none; stroke: var(--accent); stroke-width: 2; }
+svg .lane { fill: none; stroke: var(--line); }
+svg .lane-alt { fill: var(--zone); stroke: none; }
+svg .band { fill: var(--zone); stroke: var(--line); }
+
+/* Personas */
+.personas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.p { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.p header { margin: 0; display: grid; gap: 2px; }
+.p h3 { margin: 0; font-size: 16px; }
+.p .grp { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.p dl { margin: 0; display: grid; grid-template-columns: 76px 1fr; gap: 4px 10px; font-size: 13.5px; }
+.p dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; padding-top: 2px; }
+.p dd { margin: 0; min-width: 0; }
+.p.agent { border-color: var(--accent); }
+.p.agent .tag { color: var(--accent); }
+.tag { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.note { font-size: 13.5px; color: var(--muted); max-width: 80ch; margin: 0; }
+code { font-family: var(--mono); font-size: .9em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Policy Playground · perfil demo (ADR-19) + Agente Investigador (R17)</span>
+    <h1>Policy Playground na AWS</h1>
+    <p class="lede">Como a aplicação roda hoje na <code>main</code> do fork: tudo serverless e cobrado por uso, numa única região do projeto, com o agente e o servidor MCP dentro da mesma imagem do backend.</p>
+    <div class="facts">
+      <span class="fact">região us-east-2</span>
+      <span class="fact">dados 100% sintéticos</span>
+      <span class="fact">IA: Amazon Nova Lite</span>
+      <span class="fact">9 tools · /mcp/stream</span>
+      <span class="fact">deploy sem chaves (OIDC)</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-arq">
+    <h2 id="h-arq">Arquitetura</h2>
+    <p>Quem chega, por onde passa e onde cada coisa é gravada. Em verde, o caminho do agente até o modelo.</p>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1200 690" role="img" aria-label="Arquitetura AWS do Policy Playground: personas entram pelo CloudFront e pelo Cognito; o HTTP API leva /api e /mcp para uma Lambda com API, motor determinístico, Agente Investigador e servidor MCP; a Lambda grava eventos no DynamoDB e auditoria no S3 e chama o Bedrock; o deploy vem do GitHub Actions por OIDC.">
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0a746f"/></marker>
+        </defs>
+
+        <!-- Personas -->
+        <text class="t-zone" x="16" y="40">Personas</text>
+        <rect class="group" x="8" y="52" width="192" height="206" rx="10"/>
+        <rect class="persona" x="18" y="62" width="172" height="40" rx="20"/><text x="104" y="86" text-anchor="middle">Especialista de política</text>
+        <rect class="persona" x="18" y="110" width="172" height="40" rx="20"/><text x="104" y="134" text-anchor="middle">Aprovador de risco</text>
+        <rect class="persona" x="18" y="158" width="172" height="40" rx="20"/><text x="104" y="182" text-anchor="middle">Analista de dados</text>
+        <rect class="persona" x="18" y="206" width="172" height="40" rx="20"/><text x="104" y="230" text-anchor="middle">Leitor</text>
+        <text class="t-sub" x="104" y="276" text-anchor="middle">grupos do Cognito = papéis</text>
+
+        <rect class="persona" x="18" y="330" width="172" height="44" rx="22"/><text x="104" y="350" text-anchor="middle">Cliente MCP</text><text class="t-sub" x="104" y="366" text-anchor="middle">Kiro ou outro agente</text>
+        <rect class="persona" x="18" y="604" width="172" height="44" rx="22"/><text x="104" y="624" text-anchor="middle">Time CredIA</text><text class="t-sub" x="104" y="640" text-anchor="middle">GitHub Actions</text>
+
+        <!-- Borda global -->
+        <rect class="zone" x="228" y="52" width="184" height="206" rx="10"/>
+        <text class="t-zone" x="240" y="248">Borda global</text>
+        <rect class="box" x="246" y="110" width="148" height="56" rx="8"/>
+        <text class="t-title" x="320" y="134" text-anchor="middle">CloudFront</text>
+        <text class="t-sub" x="320" y="152" text-anchor="middle">HTTPS · cabeçalhos seguros</text>
+
+        <!-- Região -->
+        <rect class="zone" x="440" y="20" width="748" height="656" rx="12"/>
+        <text class="t-zone" x="456" y="42">Região do projeto · us-east-2</text>
+
+        <rect class="box" x="460" y="60" width="172" height="52" rx="8"/>
+        <text class="t-title" x="546" y="82" text-anchor="middle">Cognito</text>
+        <text class="t-sub" x="546" y="99" text-anchor="middle">login · grupos = papéis</text>
+
+        <rect class="box" x="460" y="150" width="172" height="52" rx="8"/>
+        <text class="t-title" x="546" y="172" text-anchor="middle">S3 · site</text>
+        <text class="t-sub" x="546" y="189" text-anchor="middle">React (SPA), privado</text>
+
+        <rect class="box" x="460" y="300" width="172" height="64" rx="8"/>
+        <text class="t-title" x="546" y="322" text-anchor="middle">API Gateway (HTTP)</text>
+        <text class="t-mono" x="546" y="339" text-anchor="middle">/api/* · /mcp/*</text>
+        <text class="t-sub" x="546" y="355" text-anchor="middle">JWT · 10 req/s</text>
+
+        <!-- Lambda -->
+        <rect class="box" x="680" y="220" width="252" height="232" rx="10"/>
+        <text class="t-title" x="696" y="240">Lambda · imagem do app</text>
+        <rect class="box" x="694" y="250" width="224" height="30" rx="6"/><text x="706" y="270">API (FastAPI + Web Adapter)</text>
+        <rect class="box" x="694" y="288" width="224" height="30" rx="6"/><text x="706" y="308">Motor determinístico · SIMULADO</text>
+        <rect class="acc-box" x="694" y="326" width="224" height="30" rx="6"/><text class="t-acc" x="706" y="346">Agente Investigador (loop)</text>
+        <rect class="acc-box" x="694" y="364" width="224" height="30" rx="6"/><text class="t-acc" x="706" y="384">Servidor MCP · 9 tools</text>
+        <rect class="box" x="694" y="402" width="224" height="38" rx="6"/><text x="706" y="418">Jobs assíncronos</text><text class="t-sub" x="706" y="433">execução · sugestões · investigação</text>
+
+        <!-- Dados e IA -->
+        <rect class="box" x="988" y="90" width="184" height="56" rx="8"/>
+        <text class="t-title" x="1080" y="113" text-anchor="middle">DynamoDB</text>
+        <text class="t-sub" x="1080" y="131" text-anchor="middle">eventos só de acréscimo</text>
+
+        <rect class="box" x="988" y="200" width="184" height="56" rx="8"/>
+        <text class="t-title" x="1080" y="223" text-anchor="middle">S3 · auditoria</text>
+        <text class="t-sub" x="1080" y="241" text-anchor="middle">só escrita em events/*</text>
+
+        <rect class="acc-box" x="988" y="330" width="184" height="64" rx="8"/>
+        <text class="t-title" x="1080" y="353" text-anchor="middle">Amazon Bedrock</text>
+        <text class="t-sub" x="1080" y="370" text-anchor="middle">Nova Lite · Converse</text>
+        <text class="t-mono" x="1080" y="385" text-anchor="middle">us.amazon.nova-lite-v1:0</text>
+
+        <rect class="box" x="680" y="510" width="150" height="52" rx="8"/>
+        <text class="t-title" x="755" y="532" text-anchor="middle">CloudWatch Logs</text>
+        <text class="t-sub" x="755" y="549" text-anchor="middle">retenção 7 dias</text>
+
+        <rect class="box" x="856" y="510" width="150" height="52" rx="8"/>
+        <text class="t-title" x="931" y="532" text-anchor="middle">ECR</text>
+        <text class="t-sub" x="931" y="549" text-anchor="middle">imagem do backend</text>
+
+        <rect class="box" x="1030" y="510" width="142" height="52" rx="8"/>
+        <text class="t-title" x="1101" y="532" text-anchor="middle">Budgets</text>
+        <text class="t-sub" x="1101" y="549" text-anchor="middle">alerta US$ 1 e US$ 5</text>
+
+        <rect class="box" x="856" y="600" width="150" height="52" rx="8"/>
+        <text class="t-title" x="931" y="622" text-anchor="middle">CloudFormation</text>
+        <text class="t-sub" x="931" y="639" text-anchor="middle">stack do CDK</text>
+
+        <!-- Arestas -->
+        <path class="edge" d="M200,80 H458" marker-end="url(#a)"/>
+        <text class="t-edge" x="300" y="74">login (OAuth)</text>
+
+        <path class="edge" d="M200,138 H244" marker-end="url(#a)"/>
+        <text class="t-edge" x="206" y="130">HTTPS</text>
+
+        <path class="edge" d="M394,138 H424 V176 H458" marker-end="url(#a)"/>
+        <text class="t-edge" x="400" y="194">/* site</text>
+
+        <path class="edge" d="M320,166 V332 H458" marker-end="url(#a)"/>
+        <text class="t-edge" x="328" y="324">/api/* + token</text>
+
+        <path class="edge-dash" d="M632,86 H656 V308 H634" marker-end="url(#a)"/>
+        <text class="t-edge" x="662" y="160">valida JWT</text>
+
+        <path class="edge" d="M190,352 H458" marker-end="url(#a)"/>
+        <text class="t-edge" x="222" y="346">/mcp/stream + Bearer</text>
+
+        <path class="edge" d="M632,332 H678" marker-end="url(#a)"/>
+        <text class="t-edge" x="640" y="350">proxy</text>
+
+        <path class="edge" d="M760,220 V188 H856 V218" marker-end="url(#a)"/>
+        <text class="t-edge" x="764" y="182">auto-invocação (Event)</text>
+
+        <path class="edge" d="M916,220 V118 H986" marker-end="url(#a)"/>
+        <text class="t-edge" x="924" y="110">grava eventos</text>
+
+        <path class="edge" d="M932,228 H986" marker-end="url(#a)"/>
+        <text class="t-edge" x="938" y="270">PutObject</text>
+
+        <path class="edge-acc" d="M918,341 H986" marker-end="url(#aa)"/>
+        <text class="t-acc" x="938" y="306" font-size="11">Converse</text>
+        <text class="t-acc" x="938" y="319" font-size="11">+ toolUse</text>
+
+        <path class="edge" d="M755,452 V508" marker-end="url(#a)"/>
+        <text class="t-edge" x="762" y="486">logs</text>
+
+        <path class="edge" d="M931,508 V454" marker-end="url(#a)"/>
+        <text class="t-edge" x="938" y="486">imagem</text>
+
+        <path class="edge" d="M190,626 H854" marker-end="url(#a)"/>
+        <text class="t-edge" x="300" y="618">OIDC → papel do deploy → cdk deploy (sem chave de acesso)</text>
+        <path class="edge-dash" d="M931,600 V564" marker-end="url(#a)"/>
+      </svg>
+      </div>
+      <figcaption>O CloudFront serve o site e repassa <code>/api/*</code>; o cliente MCP vai direto ao API Gateway com um token do Cognito. Uma única Lambda atende a API e roda os jobs chamando a si mesma. Só o job do agente chama o Bedrock, e todo passo dele vira evento no DynamoDB e cópia no S3. Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que são da arquitetura-alvo.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="h-fluxo">
+    <h2 id="h-fluxo">Fluxo funcional</h2>
+    <p>Uma hipótese do começo à decisão. Os dois passos em laranja são os pontos em que só uma pessoa pode avançar.</p>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1200 560" role="img" aria-label="Fluxo funcional em raias: o especialista escreve a intenção, a aplicação estrutura a hipótese, o especialista confirma o cenário, o motor simula, o especialista aciona o agente, o agente planeja e chama ferramentas conversando com o Bedrock a cada passo, registra achados com evidência, envia a recomendação, o especialista revisa os achados e o aprovador decide; analista e leitor consultam a trilha.">
+        <defs>
+          <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="bb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0a746f"/></marker>
+        </defs>
+
+        <!-- Raias -->
+        <rect class="lane-alt" x="0" y="130" width="1200" height="90"/>
+        <rect class="lane-alt" x="0" y="310" width="1200" height="80"/>
+        <rect class="lane-alt" x="0" y="470" width="1200" height="80"/>
+        <line class="lane" x1="0" y1="40" x2="1200" y2="40"/>
+        <line class="lane" x1="0" y1="550" x2="1200" y2="550"/>
+        <text class="t-title" x="12" y="80">Especialista</text><text class="t-sub" x="12" y="96">de política</text>
+        <text class="t-title" x="12" y="170">Aplicação</text><text class="t-sub" x="12" y="186">API + motor</text>
+        <text class="t-title t-acc" x="12" y="260">Agente</text><text class="t-sub" x="12" y="276">Investigador</text>
+        <text class="t-title" x="12" y="346">Bedrock</text><text class="t-sub" x="12" y="362">Nova Lite</text>
+        <text class="t-title" x="12" y="426">Aprovador</text><text class="t-sub" x="12" y="442">de risco</text>
+        <text class="t-title" x="12" y="506">Analista</text><text class="t-sub" x="12" y="522">e Leitor</text>
+        <text class="t-zone" x="160" y="26">passo a passo, da esquerda para a direita</text>
+
+        <!-- 1 -->
+        <rect class="box" x="150" y="59" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="160" y="77">1</text><text x="160" y="94">Escreve a</text><text x="160" y="106">intenção</text>
+        <!-- 2 -->
+        <rect class="box" x="254" y="149" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="264" y="167">2</text><text x="264" y="184">Estrutura a</text><text x="264" y="196">hipótese</text>
+        <!-- 3 gate -->
+        <rect class="gate-box" x="358" y="59" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="368" y="77">3</text><text x="368" y="94">Confirma o</text><text x="368" y="106">cenário</text>
+        <text class="t-gate" x="368" y="126">gate humano 1</text>
+        <!-- 4 -->
+        <rect class="box" x="462" y="149" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="472" y="167">4</text><text x="472" y="184">Simula no</text><text x="472" y="196">motor</text>
+        <!-- 5 -->
+        <rect class="box" x="566" y="59" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="576" y="77">5</text><text x="576" y="94">Aciona o</text><text x="576" y="106">agente</text>
+        <!-- 6 -->
+        <rect class="acc-box" x="670" y="239" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="680" y="257">6</text><text x="680" y="274">Planeja e</text><text x="680" y="286">usa tools</text>
+        <rect class="acc-box" x="670" y="324" width="90" height="52" rx="8"/>
+        <text x="680" y="346">Converse</text><text class="t-sub" x="680" y="362">um passo</text>
+        <!-- 7 -->
+        <rect class="acc-box" x="774" y="239" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="784" y="257">7</text><text x="784" y="274">Registra</text><text x="784" y="286">achados</text>
+        <text class="t-sub" x="774" y="306">recusa número sem fonte</text>
+        <!-- 8 -->
+        <rect class="acc-box" x="878" y="239" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="888" y="257">8</text><text x="888" y="274">Recomenda</text><text x="888" y="286">e encerra</text>
+        <!-- 9 -->
+        <rect class="box" x="982" y="59" width="90" height="52" rx="8"/>
+        <text class="t-mono" x="992" y="77">9</text><text x="992" y="94">Revisa os</text><text x="992" y="106">achados</text>
+        <!-- 10 gate -->
+        <rect class="gate-box" x="1086" y="404" width="100" height="52" rx="8"/>
+        <text class="t-mono" x="1096" y="422">10</text><text x="1096" y="439">Decide com a</text><text x="1096" y="451">evidência</text>
+        <text class="t-gate" x="1078" y="434" text-anchor="end">gate humano 2</text>
+
+        <!-- Leitores -->
+        <rect class="band" x="150" y="488" width="1036" height="44" rx="8"/>
+        <text x="166" y="508">Leem política, hipóteses, execuções, achados e a trilha de auditoria</text>
+        <text class="t-sub" x="166" y="523">não criam, não executam, não decidem · o agente acionado por eles também não executa</text>
+
+        <!-- Setas do fluxo -->
+        <path class="edge" d="M240,85 H247 V175 H252" marker-end="url(#b)"/>
+        <path class="edge" d="M344,175 H351 V85 H356" marker-end="url(#b)"/>
+        <path class="edge" d="M448,85 H455 V175 H460" marker-end="url(#b)"/>
+        <path class="edge" d="M552,175 H559 V85 H564" marker-end="url(#b)"/>
+        <path class="edge-acc" d="M656,85 H663 V265 H668" marker-end="url(#bb)"/>
+        <path class="edge-acc" d="M707,293 V322" marker-end="url(#bb)" marker-start="url(#bb)"/>
+        <path class="edge-acc" d="M760,265 H772" marker-end="url(#bb)"/>
+        <path class="edge-acc" d="M864,265 H876" marker-end="url(#bb)"/>
+        <path class="edge" d="M968,265 H975 V85 H980" marker-end="url(#b)"/>
+        <path class="edge" d="M1072,85 H1136 V402" marker-end="url(#b)"/>
+
+
+        <!-- Anotações -->
+        <text class="t-sub" x="264" y="214">sem IA</text>
+        <text class="t-sub" x="472" y="214">selo SIMULADO</text>
+        <text class="t-sub" x="680" y="226">job assíncrono</text>
+        <text class="t-sub" x="992" y="126">analisar · descartar · útil?</text>
+        <text class="t-sub" x="1186" y="472" text-anchor="end">aceitar · rejeitar · adiar</text>
+      </svg>
+      </div>
+      <figcaption>Nada é simulado antes do passo 3. Do 6 ao 8 o agente trabalha sozinho, até 14 passos, 6 simulações e 40 mil tokens. Ele escolhe o que testar, inclusive uma variação do cenário, e todo número que cita precisa existir numa execução do motor. Se não existir, a ferramenta recusa e o agente corrige. A decisão do passo 10 pode ser do aprovador de risco ou do próprio especialista.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="h-personas">
+    <h2 id="h-personas">Personas</h2>
+    <p>Quatro pessoas, um agente e dois clientes técnicos. As permissões abaixo são as que o código aplica hoje, a partir do grupo do Cognito.</p>
+    <div class="personas">
+      <article class="p">
+        <header><span class="tag">pessoa</span><h3>Especialista de política</h3><span class="grp">grupo policy-specialist</span></header>
+        <dl>
+          <dt>Quer</dt><dd>Testar uma hipótese de política sem escrever SQL ou Python e ver o impacto com evidência.</dd>
+          <dt>Pode</dt><dd>Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados e decidir.</dd>
+          <dt>No fluxo</dt><dd>Passos 1, 3, 5 e 9; pode decidir no 10.</dd>
+        </dl>
+      </article>
+      <article class="p">
+        <header><span class="tag">pessoa</span><h3>Aprovador de risco</h3><span class="grp">grupo risk-approver</span></header>
+        <dl>
+          <dt>Quer</dt><dd>Aprovar ou barrar a mudança olhando a evidência e a trilha, não a opinião.</dd>
+          <dt>Pode</dt><dd>Ler tudo e registrar a decisão: aceitar, rejeitar ou adiar, com justificativa.</dd>
+          <dt>Não pode</dt><dd>Criar hipóteses, simular ou acionar o agente.</dd>
+        </dl>
+      </article>
+      <article class="p">
+        <header><span class="tag">pessoa</span><h3>Analista de dados</h3><span class="grp">grupo data-analyst</span></header>
+        <dl>
+          <dt>Quer</dt><dd>Conferir as execuções e de onde veio cada número.</dd>
+          <dt>Pode</dt><dd>Ler política, hipóteses, execuções, achados e trilha.</dd>
+          <dt>Não pode</dt><dd>Executar ou decidir. No MVP tem as mesmas permissões do leitor.</dd>
+        </dl>
+      </article>
+      <article class="p">
+        <header><span class="tag">pessoa</span><h3>Leitor</h3><span class="grp">grupo viewer</span></header>
+        <dl>
+          <dt>Quer</dt><dd>Acompanhar o que está sendo investigado e decidido.</dd>
+          <dt>Pode</dt><dd>Somente ler.</dd>
+          <dt>Não pode</dt><dd>Nada que mude estado, nem por meio do agente ou do MCP.</dd>
+        </dl>
+      </article>
+      <article class="p agent">
+        <header><span class="tag">persona não humana</span><h3>Agente Investigador</h3><span class="grp">job investigation · Bedrock Nova Lite</span></header>
+        <dl>
+          <dt>Faz</dt><dd>Planeja, chama as 9 tools, testa variações, compara execuções, registra achados e recomenda.</dd>
+          <dt>Pode</dt><dd>O que a pessoa que o acionou pode, dentro de 14 passos, 6 simulações e 40 mil tokens.</dd>
+          <dt>Não pode</dt><dd>Inventar números, alterar a política ou decidir.</dd>
+        </dl>
+      </article>
+      <article class="p">
+        <header><span class="tag">cliente técnico</span><h3>Cliente MCP</h3><span class="grp">Kiro ou outro agente · /mcp/stream</span></header>
+        <dl>
+          <dt>Faz</dt><dd>Usa as mesmas 9 tools do agente pelo protocolo MCP.</dd>
+          <dt>Pode</dt><dd>O que o dono do token do Cognito pode; localmente, pelos cabeçalhos de demonstração.</dd>
+          <dt>Limite</dt><dd>Execuções ficam na memória da Lambda; um id antigo volta como erro recuperável.</dd>
+        </dl>
+      </article>
+      <article class="p">
+        <header><span class="tag">time</span><h3>Time CredIA</h3><span class="grp">GitHub Actions · papel via OIDC</span></header>
+        <dl>
+          <dt>Faz</dt><dd>Publica e destrói a demo pelos workflows Deploy e Destroy.</dd>
+          <dt>Pode</dt><dd>Assumir só os papéis do CDK, e só a partir da <code>main</code> do fork.</dd>
+          <dt>Não usa</dt><dd>Chave de acesso. Nada de credencial fica no repositório.</dd>
+        </dl>
+      </article>
+    </div>
+  </section>
+</div>
