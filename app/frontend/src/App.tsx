@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, poll, setDemoIdentity, type Json } from "./api";
+import { AgentPanel } from "./AgentPanel";
 import { completeLogin, getConfig, login, logout, tokenClaims, type AppConfig } from "./auth";
 import PolicyGraph, { AREA_COLOR } from "./PolicyGraph";
 import {
@@ -221,7 +222,7 @@ function Investigation({ policy, rec, canWrite, canDecide, busy, run, refresh, s
   const [value, setValue] = useState<number>(lastScenario?.overrides[paramId] ?? h.proposedOverrides[paramId] ?? param?.value ?? 0);
   const [execution, setExecution] = useState<Json | null>(null);
 
-  const lastExec = rec.executions.filter((e: Json) => !e.findingId).at(-1);
+  const lastExec = rec.executions.filter((e: Json) => !e.findingId && e.source !== "agent").at(-1);   // execuções do agente aparecem no painel dele
   useEffect(() => { if (lastExec?.jobState === "done") api.execution(lastExec.executionId).then(setExecution); }, [lastExec?.executionId, lastExec?.jobState]);
 
   const step = rec.decisions.length ? 5 : rec.findings.length ? 4 : lastExec?.jobState === "done" ? 3 : 2;
@@ -282,6 +283,7 @@ function Investigation({ policy, rec, canWrite, canDecide, busy, run, refresh, s
       {lastExec && lastExec.jobState !== "done" && <div className="callout" style={{ marginTop: 12 }}><span className="spinner" /> Calculando o impacto…</div>}
       {execution && <ResultSummary policy={policy} ex={execution} />}
 
+      {lastExec && <AgentPanel rec={rec} canWrite={canWrite} refresh={refresh} />}
       {lastExec && <Findings policy={policy} rec={rec} canWrite={canWrite} busy={busy} run={run} refresh={refresh} setFocus={setFocus} />}
       {lastExec && <Decisions rec={rec} canDecide={canDecide} busy={busy} run={run} refresh={refresh} />}
 
@@ -394,7 +396,7 @@ function Findings({ policy, rec, canWrite, busy, run, refresh, setFocus }: { pol
       {rec.findings.map((f: Json) => (
         <div className="card" key={f.findingId} onMouseEnter={() => setFocus(new Set(f.ruleRefs))} onMouseLeave={() => setFocus(new Set())}>
           <div className="row">
-            {f.source === "ai_suggestion" ? <span className="badge b-ai">Sugestão da IA</span> : <span className="badge b-det">Análise da política</span>}
+            {f.source === "agent" ? <span className="badge b-ai">Achado do agente</span> : f.source === "ai_suggestion" ? <span className="badge b-ai">Sugestão da IA</span> : <span className="badge b-det">Análise da política</span>}
             <span className="badge b-state">{FINDING_STATE[f.investigationState]}</span>
             <EvidenceBadge level={f.evidenceLevel} />
           </div>

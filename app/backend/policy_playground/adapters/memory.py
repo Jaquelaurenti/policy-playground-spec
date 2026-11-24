@@ -64,6 +64,9 @@ class NoModel:
     def suggest(self, context, cap):
         raise ModelUnavailable("Nenhum modelo configurado neste ambiente")
 
+    def converse(self, **_):
+        raise ModelUnavailable("Nenhum modelo configurado neste ambiente")
+
 
 class FakeModel:
     """Modelo de teste: devolve sugestões fixas e permite testar o filtro de números."""
@@ -77,6 +80,33 @@ class FakeModel:
 
     def suggest(self, context, cap):
         return copy.deepcopy(self.suggestions[:cap]), self.tokens
+
+
+class ScriptedModel:
+    """Modelo de teste do Agente Investigador: cada passo é uma função (messages) -> (texto, [(tool, input)])
+    ou str (resposta final). Roda contra as tools e o motor reais."""
+    name = "scripted"
+
+    def __init__(self, steps):
+        self.steps, self.i = list(steps), 0
+
+    def suggest(self, context, cap):
+        return [], 0
+
+    def converse(self, system, messages, tool_config, max_tokens=1000):
+        if self.i >= len(self.steps):
+            raise ModelUnavailable("roteiro do modelo de teste acabou")
+        step = self.steps[self.i](messages)
+        self.i += 1
+        usage = {"inputTokens": 100, "outputTokens": 20}
+        if isinstance(step, str):
+            return {"stopReason": "end_turn", "usage": usage,
+                    "output": {"message": {"role": "assistant", "content": [{"text": step}]}}}
+        text, calls = step
+        content = ([{"text": text}] if text else []) + [
+            {"toolUse": {"toolUseId": f"t{self.i}-{k}", "name": n, "input": inp}} for k, (n, inp) in enumerate(calls)]
+        return {"stopReason": "tool_use", "usage": usage,
+                "output": {"message": {"role": "assistant", "content": content}}}
 
 
 class ThreadDispatcher:

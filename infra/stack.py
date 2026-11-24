@@ -67,11 +67,11 @@ class PolicyPlaygroundDemo(cdk.Stack):
         fn = lambda_.DockerImageFunction(
             self, "Api", function_name=fn_name,
             code=lambda_.DockerImageCode.from_image_asset(str(ROOT), file="app/Dockerfile"),
-            architecture=lambda_.Architecture.X86_64, memory_size=1024, timeout=cdk.Duration.seconds(29),
+            architecture=lambda_.Architecture.X86_64, memory_size=1024, timeout=cdk.Duration.seconds(120),   # job do agente (R17); o HTTP API segue cortando em 30 s
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={"PP_STORE": "dynamodb", "PP_TABLE": table.table_name, "PP_AUDIT_BUCKET": audit.bucket_name,
                          "PP_AUTH": "cognito", "PP_MODEL_ID": model_id, "PP_SUGGESTION_CAP": "5",
-                         "PP_MAX_SUGGESTION_REQUESTS": "3"})
+                         "PP_MAX_SUGGESTION_REQUESTS": "3", "PP_MCP": "on"})
         table.grant_read_write_data(fn)
         fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:PutObject"], resources=[audit.arn_for_objects("events/*")]))
         # Auto-invocação para os jobs assíncronos. ARN montado pelo nome para não criar dependência circular.
@@ -116,6 +116,12 @@ class PolicyPlaygroundDemo(cdk.Stack):
                        authorizer=authorizers.HttpJwtAuthorizer(
                            "Jwt", f"https://cognito-idp.{cdk.Aws.REGION}.amazonaws.com/{pool.user_pool_id}",
                            jwt_audience=[client.user_pool_client_id]))
+        # Servidor MCP do Playground (R17.6): mesmo autorizador JWT; o ator vem do token, como na API.
+        api.add_routes(path="/mcp/{proxy+}", methods=[apigw.HttpMethod.ANY],
+                       integration=integrations.HttpLambdaIntegration("LambdaMcp", fn),
+                       authorizer=authorizers.HttpJwtAuthorizer(
+                           "JwtMcp", f"https://cognito-idp.{cdk.Aws.REGION}.amazonaws.com/{pool.user_pool_id}",
+                           jwt_audience=[client.user_pool_client_id]))
         stage = api.default_stage.node.default_child
         stage.default_route_settings = apigw.CfnStage.RouteSettingsProperty(throttling_burst_limit=20, throttling_rate_limit=10)
 
@@ -141,3 +147,4 @@ class PolicyPlaygroundDemo(cdk.Stack):
         cdk.CfnOutput(self, "Url", value=site_url, description="Abra aqui a demo")
         cdk.CfnOutput(self, "UserPoolId", value=pool.user_pool_id)
         cdk.CfnOutput(self, "FunctionName", value=fn.function_name)
+        cdk.CfnOutput(self, "McpUrl", value=f"{api.api_endpoint}/mcp/stream", description="Servidor MCP (Bearer: token do Cognito)")

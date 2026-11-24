@@ -89,7 +89,8 @@ def validate_overrides(model, overrides: dict) -> dict[str, float]:
 def project(events: list[dict]) -> dict:
     """Reconstrói o InvestigationRecord a partir do log de eventos."""
     rec = {"hypothesis": None, "scenarios": [], "executions": {}, "findings": {}, "decisions": [], "assessments": [],
-           "suggestionJobs": [], "events": len(events), "metrics": {}}
+           "suggestionJobs": [], "investigations": [], "events": len(events), "metrics": {}}
+    invs: dict[str, dict] = {}
     for e in events:
         t, d = e["type"], e["data"]
         if t == "HypothesisCreated":
@@ -120,8 +121,33 @@ def project(events: list[dict]) -> dict:
                     j.update({"state": "done", "modelStatus": d.get("modelStatus"), "tokens": d.get("tokens", 0)})
             rec["metrics"]["modelTokens"] = rec["metrics"].get("modelTokens", 0) + d.get("tokens", 0)
         elif t == "FindingSuggested":
-            rec["findings"][d["findingId"]] = {**d, "investigationState": "suggested", "evidenceLevel": "none",
-                                               "executionIds": [], "currentExecutionId": None, "history": []}
+            agent = d.get("source") == "agent" and d.get("executionIds")
+            ex_ids = list(d.get("executionIds") or []) if agent else []
+            rec["findings"][d["findingId"]] = {**d, "investigationState": "suggested",
+                                               # achado do agente nasce com a evidência da execução que cita (R17.11)
+                                               "evidenceLevel": "simulated" if agent else "none",
+                                               "executionIds": ex_ids, "currentExecutionId": ex_ids[-1] if ex_ids else None,
+                                               "history": []}
+            if d.get("jobId") in invs:
+                invs[d["jobId"]]["findingIds"].append(d["findingId"])
+        elif t == "InvestigationRequested":
+            invs[d["jobId"]] = {**d, "state": "pending", "requestedAt": e["at"], "requestedBy": e["actor"],
+                                "timeline": [], "executionIds": [], "findingIds": []}
+        elif t == "InvestigationStarted":
+            invs[d["jobId"]]["state"] = "running"
+        elif t == "AgentToolCalled":
+            invs[d["jobId"]]["timeline"].append({**d, "at": e["at"]})
+        elif t == "AgentExecutionCompleted":
+            rec["executions"][d["executionId"]] = {**d, "jobState": "done", "completedAt": e["at"],
+                                                   "evidenceLevel": evidence_level(d.get("mode"), d.get("status"))}
+            invs[d["jobId"]]["executionIds"].append(d["executionId"])
+            if not rec["metrics"].get("hypothesisToEvidenceSeconds"):
+                rec["metrics"]["hypothesisToEvidenceSeconds"] = round(e["at_epoch"] - rec["hypothesis"]["submittedAtEpoch"], 2)
+        elif t == "InvestigationCompleted":
+            invs[d["jobId"]].update({"state": "done", "outcome": d["status"], "steps": d.get("steps"),
+                                     "tokens": d.get("tokens", 0), "recommendation": d.get("recommendation"),
+                                     "reason": d.get("reason"), "completedAt": e["at"]})
+            rec["metrics"]["modelTokens"] = rec["metrics"].get("modelTokens", 0) + d.get("tokens", 0)
         elif t == "FindingTransitioned":
             f = rec["findings"][d["findingId"]]
             f["history"].append({"from": f["investigationState"], "to": d["to"], "reason": d.get("reason"), "by": e["actor"], "at": e["at"]})
@@ -136,6 +162,7 @@ def project(events: list[dict]) -> dict:
         rec["hypothesis"]["latestDecision"] = rec["decisions"][-1]
     assessed = len(rec["assessments"])
     rec["metrics"]["relevantFindingShare"] = round(sum(a["relevant"] for a in rec["assessments"]) / assessed, 3) if assessed else None
+    rec["investigations"] = list(invs.values())
     rec["findings"] = list(rec["findings"].values())
     rec["executions"] = list(rec["executions"].values())
     return rec

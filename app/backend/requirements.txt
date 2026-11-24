@@ -1,3 +1,5 @@
 fastapi==0.115.6
 uvicorn==0.34.0
 boto3==1.35.90
+mcp==1.9.4          # servidor MCP do agente (R17.6); 2.x exige Starlette 1.x
+pydantic==2.11.10   # mcp 1.9.4 usa API interna removida no pydantic 2.14

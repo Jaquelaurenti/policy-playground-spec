@@ -8,6 +8,7 @@ Identidade:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -57,13 +58,24 @@ def build_playground() -> Playground:
 
 
 def create_app(pg: Playground | None = None) -> FastAPI:
-    app = FastAPI(title="Policy Playground", version="1.0.0")
     state = {}
 
     def playground() -> Playground:
         if "pg" not in state:
             state["pg"] = pg or build_playground()
         return state["pg"]
+
+    # Servidor MCP do Playground (R17.6): as mesmas tools do agente, para qualquer cliente MCP (ex. Kiro).
+    mcp_app, mcp_lifespan = None, None
+    if os.environ.get("PP_MCP", "on") != "off":
+        try:
+            from ..agent.mcp_server import build_mcp_asgi
+            mcp_app, mcp_lifespan = build_mcp_asgi(lambda: playground().model, lambda req: actor(req))
+        except ImportError as e:                  # pacote mcp ausente ou incompatível: o app segue sem /mcp
+            logging.getLogger("policy_playground").warning("Servidor MCP desligado: %s", e)
+            mcp_app = None
+
+    app = FastAPI(title="Policy Playground", version="1.0.0", lifespan=mcp_lifespan)
 
     def actor(request: Request) -> Actor:
         if os.environ.get("PP_AUTH", "local") == "cognito":
@@ -113,7 +125,8 @@ def create_app(pg: Playground | None = None) -> FastAPI:
     @app.get("/api/health")
     def health():
         p = playground()
-        return {"ok": True, "policyVersion": p.model.policy_version, "model": p.ai.name, "store": os.environ.get("PP_STORE", "memory")}
+        return {"ok": True, "policyVersion": p.model.policy_version, "model": p.ai.name, "store": os.environ.get("PP_STORE", "memory"),
+                "agent": {"enabled": p.ai.name != "none", "mcp": "/mcp/stream" if mcp_app is not None else None}}
 
     @app.get("/api/me")
     def me(request: Request):
@@ -164,6 +177,12 @@ def create_app(pg: Playground | None = None) -> FastAPI:
         a, p = actor(request), playground()
         return p.idempotent(idem, f"{hid}#suggest", lambda: p.request_suggestions(a, hid))
 
+    @app.post("/api/hypotheses/{hid}/investigations")
+    def investigate(hid: str, request: Request, idem: str | None = Header(None, alias="Idempotency-Key")):
+        """Aciona o Agente Investigador (R17) sobre o último cenário confirmado; responde 202 com o job."""
+        a, p = actor(request), playground()
+        return JSONResponse(p.idempotent(idem, f"{hid}#investigate", lambda: p.request_investigation(a, hid)), 202)
+
     @app.post("/api/hypotheses/{hid}/findings/{fid}/transitions")
     def transition(hid: str, fid: str, request: Request, body: dict = Body(...), idem: str | None = Header(None, alias="Idempotency-Key")):
         a, p = actor(request), playground()
@@ -184,6 +203,9 @@ def create_app(pg: Playground | None = None) -> FastAPI:
         a, p = actor(request), playground()
         return p.idempotent(idem, f"{hid}#decide", lambda: p.decide(a, hid, body.get("outcome", ""), body.get("rationale", ""),
                                                                    body.get("evidenceRefs", [])))
+
+    if mcp_app is not None:
+        app.mount("/mcp", mcp_app)
 
     @app.post("/events")
     async def lambda_events(request: Request):
