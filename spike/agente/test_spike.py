@@ -188,6 +188,34 @@ class AgentLoopTest(unittest.TestCase):
         self.assertEqual(len(reg.executions), 2)
         self.assertEqual(out["status"], "done")
 
+    # ---- regressões do segundo teste real no Bedrock ---------------------------------------
+    def test_deltas_prontos_evitam_aritmetica_do_modelo(self):
+        """No Bedrock o agente leu 'motivo 102 de 1 para 5' como '5 novas reprovações'. O motor agora entrega o delta."""
+        reg = ToolRegistry(MODEL, SPECIALIST)
+        d = reg.call("run_scenario", {"overrides": {"P001": 3000}})["deltas"]
+        self.assertEqual(d["motivos"][102], {"nome": "Renda insuficiente", "de": 1, "para": 5, "delta": 4})
+        self.assertEqual(d["resultado"]["REPROVACAO_SIMULADA"]["delta"], 3)
+        self.assertEqual(d["resultado"]["APROVACAO_SIMULADA"]["delta"], -3)
+
+    def test_submit_recommendation_encerra_e_valida(self):
+        steps = [lambda m: ("", [("run_scenario", {"overrides": {"P001": 3000}}),
+                                 ("run_scenario", {"overrides": {"P001": 3500}})]),
+                 lambda m: ("", [("submit_recommendation", {"text": "Reprova 99 a mais."})]),         # recusada
+                 lambda m: ("", [("submit_recommendation",
+                                  {"text": "Com 3000, as reprovações vão de 4 para 7; revisar antes de decidir."})])]
+        out = investigate(ScriptedClient(steps), "stub", ToolRegistry(MODEL, SPECIALIST), "x", {"P001": 3000})
+        self.assertEqual((out["status"], out["steps"]), ("done", 3))
+        self.assertIn("de 4 para 7", out["summary"])
+
+    def test_submit_sem_sensibilidade_e_cobrado(self):
+        steps = [lambda m: ("", [("run_scenario", {"overrides": {"P001": 3000}})]),
+                 lambda m: ("", [("submit_recommendation", {"text": "Revisar."})]),
+                 lambda m: ("", [("run_scenario", {"overrides": {"P001": 2800}})]),
+                 lambda m: ("", [("submit_recommendation", {"text": "Revisar com 2800 também."})])]
+        reg = ToolRegistry(MODEL, SPECIALIST)
+        out = investigate(ScriptedClient(steps), "stub", reg, "x", {"P001": 3000})
+        self.assertEqual((out["status"], len(reg.executions)), ("done", 2))
+
     def test_permissoes_de_quem_acionou(self):
         viewer = ToolRegistry(MODEL, Actor("vic", {"Viewer"}))
         viewer.call("get_policy", {})                                    # leitura pode

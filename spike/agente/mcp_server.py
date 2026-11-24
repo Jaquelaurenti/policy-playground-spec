@@ -1,7 +1,7 @@
 """SPIKE (descartável) — o mesmo ToolRegistry exposto como servidor MCP (R17.6).
 
 Valida para o sprint:
-1. As 8 tools delegam ao MESMO registro usado pela Converse (nenhuma lógica duplicada).
+1. As 9 tools delegam ao MESMO registro usado pela Converse (nenhuma lógica duplicada).
 2. O servidor sobe em Streamable HTTP stateless com resposta JSON, que funciona atrás do
    Lambda Web Adapter, e pode ser montado no FastAPI existente.
 
@@ -64,6 +64,10 @@ def build_mcp(reg: ToolRegistry) -> FastMCP:
     @mcp.tool(description=DESC["read_audit"])
     def read_audit() -> dict:
         return call("read_audit")
+
+    @mcp.tool(description=DESC["submit_recommendation"])
+    def submit_recommendation(text: str) -> dict:
+        return call("submit_recommendation", text=text)
 
     @mcp.tool(description=DESC["register_finding"])
     def register_finding(title: str, text: str, ruleRefs: list[str], executionIds: list[str]) -> dict:

@@ -32,11 +32,12 @@ Regras obrigatórias:
 6. Se uma ferramenta devolver erro (ex. cannot_calculate), tente uma alternativa.
 7. Registre de 1 a 3 achados com register_finding. Se a tool recusar, corrija e tente de novo.
 8. Você não altera a política e não decide: os achados vão para revisão humana.
-9. Termine com "RECOMENDAÇÃO:" em português, curta, usando só números que vieram das execuções."""
+9. Para citar variações use o campo deltas (de, para, delta) das execuções; não faça contas por conta própria.
+10. Termine chamando submit_recommendation com uma recomendação curta em português."""
 
 
 def investigate(client, model_id: str, registry: ToolRegistry, intent: str, overrides: dict,
-                max_steps: int = 12, max_tokens: int = 1000, token_cap: int = 60000) -> dict:
+                max_steps: int = 14, max_tokens: int = 1000, token_cap: int = 60000) -> dict:
     user = (f"Intenção do especialista: {intent}\nCenário confirmado (overrides): "
             f"{json.dumps(overrides)}\nInvestigue e registre os achados.")
     msgs = [{"role": "user", "content": [{"text": user}]}]
@@ -67,7 +68,7 @@ def investigate(client, model_id: str, registry: ToolRegistry, intent: str, over
                 registry.note("checklist: falta a análise de sensibilidade")
                 msgs.append({"role": "user", "content": [{"text":
                     "Antes de concluir: teste ao menos uma variação do cenário com run_scenario, compare as duas "
-                    "execuções com compare e registre o que mudou, se for relevante."}]})
+                    "execuções com compare, registre o que mudou e chame submit_recommendation."}]})
                 continue
             evidence = [{"overrides": x["overrides"], "comparison": x["comparison"]}
                         for x in registry.executions.values()] + registry.base_evidence()
@@ -78,8 +79,8 @@ def investigate(client, model_id: str, registry: ToolRegistry, intent: str, over
                        else "não começa com \"RECOMENDAÇÃO:\"")
                 registry.note(f"recomendação recusada: {why}")
                 msgs.append({"role": "user", "content": [{"text":
-                    f"Sua resposta final {why}. Escreva só a linha \"RECOMENDAÇÃO: ...\" em português, sem "
-                    "<thinking>, usando apenas números das execuções ou nenhum número."}]})
+                    f"Sua resposta final {why}. Chame submit_recommendation com a recomendação em português, "
+                    "usando apenas números das execuções ou nenhum número."}]})
                 continue
             if unbound or not final:
                 return result("done", "Recomendação omitida: sem formato válido ou com números sem evidência.", step)
@@ -96,4 +97,15 @@ def investigate(client, model_id: str, registry: ToolRegistry, intent: str, over
                 res, status = {"text": f"erro: {e}"}, "error"
             results.append({"toolResult": {"toolUseId": tu["toolUseId"], "content": [res], "status": status}})
         msgs.append({"role": "user", "content": results})
+        if registry.recommendation:
+            if len(registry.executions) < 2 and "sensitivity" not in nudged \
+                    and len(registry.executions) < registry.max_simulations:
+                nudged.add("sensitivity")
+                registry.recommendation = None
+                registry.note("checklist: falta a análise de sensibilidade")
+                msgs.append({"role": "user", "content": [{"text":
+                    "Antes de concluir: teste ao menos uma variação do cenário com run_scenario, compare as duas "
+                    "execuções e então chame submit_recommendation de novo."}]})
+                continue
+            return result("done", registry.recommendation, step)
     return result("limited", f"limite de {max_steps} passos atingido", max_steps)

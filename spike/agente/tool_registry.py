@@ -60,6 +60,10 @@ TOOL_SPECS = [
     {"name": "read_audit",
      "description": "Trilha desta investigação e achados anteriores da hipótese, para não repetir trabalho.",
      "inputSchema": _obj({}, [])},
+    {"name": "submit_recommendation",
+     "description": "Encerra a investigação com a recomendação ao especialista (texto curto em português). "
+                    "Só números de execuções, valores de baseline ou candidatos. Chame por último.",
+     "inputSchema": _obj({"text": {"type": "string"}}, ["text"])},
     {"name": "register_finding",
      "description": "Registra um achado para revisão humana. Todo número do texto precisa estar no resultado de uma "
                     "das execuções citadas; caso contrário a tool recusa.",
@@ -81,6 +85,7 @@ class ToolRegistry:
         self.findings: list[dict] = []
         self.prior_findings = list(prior_findings or [])
         self.calls: list[dict] = []          # no sprint: evento AgentToolCalled no event store
+        self.recommendation: str | None = None
         self.facts: list[dict] = []          # fatos estruturais devolvidos pelos geradores nesta investigação
 
     # ---- despacho + permissões + auditoria ------------------------------------------
@@ -171,12 +176,14 @@ class ToolRegistry:
         res_cmp = res["comparison"]["outputs"]
         return {"executionId": eid, "mode": "SIMULADO", "overrides": ov, "records": res["comparison"]["records"],
                 "changedRecords": {o: len(v["changedRecords"]) for o, v in res_cmp.items()},
-                "hint": "use compare para ver saídas, motivos e limites"}
+                "deltas": _deltas(res["comparison"]),
+                "hint": "cite variações pelo campo deltas (de, para, delta); use compare para o detalhe"}
 
     def t_compare(self, execution_id, against_execution_id=None):
         a = self._execution(execution_id)
         if not against_execution_id:
-            return {"executionId": execution_id, "mode": "SIMULADO", "vs": "baseline", "comparison": a["comparison"]}
+            return {"executionId": execution_id, "mode": "SIMULADO", "vs": "baseline",
+                    "deltas": _deltas(a["comparison"]), "comparison": a["comparison"]}
         b = self._execution(against_execution_id)
         diff = {}
         for o in self.model.output_vars:
@@ -187,8 +194,10 @@ class ToolRegistry:
                 "overrides": {"a": a["overrides"], "b": b["overrides"]},
                 "recordsThatDiffer": diff,
                 "motivos": {code: {"name": m["name"], "a": m["scenario"],
-                                   "b": b["comparison"]["motivos"][code]["scenario"]}
-                            for code, m in a["comparison"]["motivos"].items()}}
+                                   "b": b["comparison"]["motivos"][code]["scenario"],
+                                   "delta_a_menos_b": m["scenario"] - b["comparison"]["motivos"][code]["scenario"]}
+                            for code, m in a["comparison"]["motivos"].items()},
+                "recordsThatDifferCount": {o: len(v) for o, v in diff.items()}}
 
     def t_get_candidates(self, overrides, **kw):
         gens = kw.pop("generators", None) or ["G1", "G2"]   # "generators" sombrearia o módulo
@@ -211,6 +220,17 @@ class ToolRegistry:
                 "findingsThisInvestigation": [{"title": f["title"], "executionIds": f["executionIds"]}
                                               for f in self.findings],
                 "priorFindings": [{"title": f.get("title"), "state": f.get("state")} for f in self.prior_findings]}
+
+    def t_submit_recommendation(self, text):
+        text = (text or "").strip()
+        if not text:
+            raise ToolError("recomendação vazia")
+        ev = [_evidence(x) for x in self.executions.values()] + self.base_evidence()
+        unbound = unbound_numbers(text, ev)
+        if unbound:
+            raise ToolError(f"números sem evidência na recomendação: {unbound}. Reescreva sem eles.")
+        self.recommendation = text[:600]
+        return {"status": "recebida", "next": "encerre a investigação"}
 
     def t_register_finding(self, title, text, ruleRefs, executionIds):
         if isinstance(executionIds, str):
@@ -235,8 +255,23 @@ class ToolRegistry:
         return {"findingId": f["findingId"], "state": "suggested", "awaits": "revisão humana"}
 
 
+def _deltas(cmp: dict) -> dict:
+    """Variações já calculadas pelo motor, para o agente não fazer aritmética (evita 'de 1 para 5' virar '5 novas')."""
+    out = {}
+    for o, v in cmp["outputs"].items():
+        if v["type"] == "category":
+            cats = sorted(set(v["baseline"]) | set(v["scenario"]))
+            out[o] = {c: {"de": v["baseline"].get(c, 0), "para": v["scenario"].get(c, 0),
+                          "delta": v["scenario"].get(c, 0) - v["baseline"].get(c, 0)} for c in cats}
+        else:
+            out[o] = {"de": v["baselineSum"], "para": v["scenarioSum"], "delta": v["scenarioSum"] - v["baselineSum"]}
+    out["motivos"] = {code: {"nome": m["name"], "de": m["baseline"], "para": m["scenario"],
+                             "delta": m["scenario"] - m["baseline"]} for code, m in cmp["motivos"].items()}
+    return out
+
+
 def _evidence(ex: dict) -> dict:
-    return {"overrides": ex["overrides"], "comparison": ex["comparison"]}
+    return {"overrides": ex["overrides"], "comparison": ex["comparison"], "deltas": _deltas(ex["comparison"])}
 
 
 def _norm(n: str) -> str:

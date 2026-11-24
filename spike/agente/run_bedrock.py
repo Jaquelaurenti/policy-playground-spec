@@ -29,7 +29,7 @@ def main():
     ap.add_argument("--region", default="us-east-1")
     ap.add_argument("--intent", required=True)
     ap.add_argument("--set", action="append", required=True, help="P001=3000 (repita para mais de um)")
-    ap.add_argument("--max-steps", type=int, default=10)
+    ap.add_argument("--max-steps", type=int, default=14)
     a = ap.parse_args()
     overrides = {k: float(v) for k, v in (s.split("=", 1) for s in a.set)}
     model = load_from_folder(ROOT / ".kiro" / "specs" / "policy-playground" / "fixtures")
