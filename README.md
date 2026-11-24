@@ -3,6 +3,8 @@
 Entrega documental do **Policy Playground** para o hackathon (AWS Builders League). Este repositório contém a especificação técnica do projeto seguindo o fluxo de Spec-Driven Development do Kiro: **Requirements → Design → Tasks**.
 
 > **Especificação + MVP de demonstração.** Além do spec, o repositório traz um MVP funcional sobre o fixture **sintético** (`app/`), com o `SimulatedRunner`: todo número exibido leva o selo SIMULADO e não é impacto real. Os condicionais C1–C5 (runner real, PR real etc.) não estão implementados.
+>
+> **Agente Investigador (R17).** A spec 1.3 define um agente com loop de tool use sobre o motor determinístico, exposto também como servidor MCP. Ele está **especificado, mas ainda não implementado**: será construído no sprint do hackathon (Phase 10 do `tasks.md`). Hoje a IA do app é uma única chamada ao Bedrock Converse que sugere investigações em texto, e sem modelo configurado só rodam os geradores determinísticos G1 e G2.
 
 ## O que é o Policy Playground
 
@@ -35,9 +37,15 @@ Princípio central do produto:
 │   └── Dockerfile                      ← mesma imagem local e na Lambda
 ├── infra/                              ← CDK (Python): perfil demo de custo zero (ADR-19)
 ├── scripts/                            ← bootstrap no CloudShell e criação de usuários da demo
+├── arquitetura/                        ← documento de arquitetura, trade-offs, diagramas e fontes
+├── tools/                              ← utilitários (validador do Policy Spec, gerador da apresentação)
+├── tests/                              ← testes do validador do Policy Spec
 ├── .github/workflows/                  ← CI, deploy e destroy via OIDC
 ├── docs/
-│   └── working-backwards.md            ← PR/FAQ de origem (contexto de negócio)
+│   ├── working-backwards.md            ← PR/FAQ de origem (contexto de negócio)
+│   ├── proposta-hackathon.md           ← proposta unificada do time para o hackathon (agente + MCP)
+│   ├── roteiro-apresentacao.md         ← roteiro do pitch (5 min + 2 de perguntas) e da demo
+│   └── apresentacao-policy-playground.pptx  ← slides do pitch (gerado por tools/gerar_apresentacao.py)
 └── README.md
 ```
 
@@ -118,13 +126,16 @@ Cada pessoa sobe a demo **no próprio fork**, ligado à **própria conta AWS**. 
 
 | #   | Documento                                                          | O que contém                                                                                                                                                                                                                                                                                                                                                             |
 | --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 📋  | [requirements.md](./.kiro/specs/policy-playground/requirements.md) | Requisitos (R1–R16) + NFRs em formato EARS: o que a solução deve fazer, com critérios de aceite, premissas e questões em aberto.                                                                                                                                                                                                                                         |
-| 🎨  | [design.md](./.kiro/specs/policy-playground/design.md)             | Desenho da solução: aplicação única com módulos internos, modelo de dados, fluxos, execução determinística, investigação por IA (incluindo geradores determinísticos de candidatos), governança, execução assíncrona e idempotente, visão de implantação AWS (ECS Fargate) com caminho de escalabilidade, alternativas não adotadas e diagrama de visão geral (Mermaid). |
-| ✅  | [tasks.md](./.kiro/specs/policy-playground/tasks.md)               | Plano de implementação: tarefas incrementais e verificáveis, vinculadas a Requirements e Design, com as tarefas condicionais (dependentes de acesso ao POLITICA DE CREDITO) separadas do núcleo do MVP.                                                                                                                                                                  |
+| 📋  | [requirements.md](./.kiro/specs/policy-playground/requirements.md) | Requisitos (R1–R17, com o Agente Investigador na R17) + NFRs em formato EARS: o que a solução deve fazer, com critérios de aceite, premissas e questões em aberto.                                                                                                                                                                                                                                         |
+| 🎨  | [design.md](./.kiro/specs/policy-playground/design.md)             | Desenho da solução: aplicação única com módulos internos, modelo de dados, fluxos, execução determinística, investigação por IA (geradores determinísticos de candidatos e, no §10.4, o Agente Investigador com 8 tools e servidor MCP), governança, execução assíncrona e idempotente, visão de implantação AWS (ECS Fargate) com caminho de escalabilidade, alternativas não adotadas e diagrama de visão geral (Mermaid). |
+| ✅  | [tasks.md](./.kiro/specs/policy-playground/tasks.md)               | Plano de implementação: tarefas incrementais e verificáveis, vinculadas a Requirements e Design, com as tarefas condicionais (dependentes de acesso ao POLITICA DE CREDITO) separadas do núcleo do MVP. A Phase 10 (tasks 24.1 a 29) cobre o agente do hackathon.                                                                                                                                                                  |
 
 ## Material de apoio
 
 - [docs/working-backwards.md](./docs/working-backwards.md) — documento Working Backwards (press release / FAQ) que originou o produto. Contexto de negócio, não é um dos três artefatos.
+- [docs/proposta-hackathon.md](./docs/proposta-hackathon.md) — proposta unificada do time: lacunas frente à rubrica do hackathon, agente com tool use e MCP, divisão em cinco frentes, cronograma do sprint e riscos.
+- [docs/roteiro-apresentacao.md](./docs/roteiro-apresentacao.md) — roteiro do pitch (5 min + 2 de perguntas), roteiro da demo, perguntas prováveis e checklist antes do freeze.
+- [docs/apresentacao-policy-playground.pptx](./docs/apresentacao-policy-playground.pptx) — slides do pitch. Para regerar depois de editar o texto: `python tools/gerar_apresentacao.py` (requer `python-pptx`).
 - [`fixtures/`](./.kiro/specs/policy-playground/fixtures/) — fixture **100% sintético** usado como contrato de referência do MVP demonstrativo.
   - [policy-playground-demo-policy.json](./.kiro/specs/policy-playground/fixtures/policy-playground-demo-policy.json) — exemplo reduzido de uma Policy Spec, mantido exatamente como foi recebido.
   - [policy-playground-demo-extensions.json](./.kiro/specs/policy-playground/fixtures/policy-playground-demo-extensions.json) — metadados do Playground que complementam o Policy Spec sem alterá-lo: proveniência Git, áreas POLITICA DE CREDITO, domínios dos parâmetros e referência ao dataset.
@@ -137,11 +148,25 @@ Cada pessoa sobe a demo **no próprio fork**, ligado à **própria conta AWS**. 
 
 | Documento       | Versão | Status                                          |
 | --------------- | ------ | ----------------------------------------------- |
-| requirements.md | 1.2    | 1.0 aprovado; revisões 1.1 e 1.2 em revisão     |
-| design.md       | 1.2    | 1.0 aprovado; revisões 1.1 e 1.2 em revisão     |
-| tasks.md        | 1.2    | Rascunho em revisão; implementação não iniciada |
+| requirements.md | 1.3    | 1.0 aprovado; revisões 1.1, 1.2 e 1.3 (R17) em revisão |
+| design.md       | 1.3    | 1.0 aprovado; revisões 1.1, 1.2 e 1.3 (§10.4) em revisão |
+| tasks.md        | 1.3    | Rascunho em revisão. O MVP de `app/` já existe, mas as caixas das tasks 1 a 20 ainda não foram marcadas. A Phase 10 (agente) não foi iniciada |
 
-O que mudou em cada revisão está na seção **Revision History** de cada documento. A revisão 1.2 incorpora as decisões que o time registrou na fase de inception; elas estão no **Decision Log** do `requirements.md`, e as alternativas avaliadas e não adotadas estão no §17 do `design.md`.
+O que mudou em cada revisão está na seção **Revision History** de cada documento. A revisão 1.2 incorpora as decisões que o time registrou na fase de inception; elas estão no **Decision Log** do `requirements.md`, e as alternativas avaliadas e não adotadas estão no §17 do `design.md`. A revisão 1.3 acrescenta o Agente Investigador (R17, decisão D-17, design §10.4 e tasks 24.1 a 29).
+
+## Hackathon (AWS Builders League)
+
+O hackathon exige uma demo implantada e ao vivo, com componente agêntico. O plano do time está em [docs/proposta-hackathon.md](./docs/proposta-hackathon.md):
+
+| Frente | Tasks | Entrega |
+| --- | --- | --- |
+| 1. Agente com tool use | 25, 26 | Registro das 8 tools, loop no Bedrock Converse, limites, job e eventos (caminho crítico) |
+| 2. Servidor MCP | 27 | `/mcp` a partir do mesmo registro, `mcp==1.9.4`, timeout da Lambda em 120 s |
+| 3. Front do agente | 28 | Plano, chamadas de ferramenta, achados com selo SIMULADO e recomendação |
+| 4. Deploy e infra | 24.1, 29 | Deploy no início do sprint, usuários, redeploys e plano B |
+| 5. Negócio e pitch | 28.1 | Números com fonte, roteiro e ensaio com cronômetro |
+
+Estado hoje: o agente é spec (R17, design §10.4); o código dele será escrito no sprint. O que já roda é o MVP determinístico descrito acima.
 
 ## Ordem de leitura sugerida
 
