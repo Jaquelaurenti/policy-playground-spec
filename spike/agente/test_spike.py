@@ -113,7 +113,8 @@ class AgentLoopTest(unittest.TestCase):
         self.assertIn("resultado", d["recordsThatDiffer"])
 
     def test_recomendacao_com_numero_inventado_e_reescrita(self):
-        steps = [lambda m: ("PLANO: simular", [("run_scenario", {"overrides": {"P001": 3000}})]),
+        steps = [lambda m: ("PLANO: simular", [("run_scenario", {"overrides": {"P001": 3000}}),
+                                               ("run_scenario", {"overrides": {"P001": 2800}})]),
                  lambda m: "RECOMENDAÇÃO: aprova 17% a menos.",
                  lambda m: "RECOMENDAÇÃO: 3000 muda o resultado de 3 propostas; revisar antes de decidir."]
         out = investigate(ScriptedClient(steps), "stub", ToolRegistry(MODEL, SPECIALIST), "x", {"P001": 3000})
@@ -134,11 +135,58 @@ class AgentLoopTest(unittest.TestCase):
 
         steps = [lambda m: ("", [("run_scenario", {"overrides": {"P001": 3000}})]),
                  lambda m: ("Erro; tento de novo com outro valor.", [("run_scenario", {"overrides": {"P001": 2900}})]),
+                 lambda m: "RECOMENDAÇÃO: revisar.",                                   # checklist pede sensibilidade
+                 lambda m: ("", [("run_scenario", {"overrides": {"P001": 2700}})]),
                  lambda m: "RECOMENDAÇÃO: revisar."]
         with mock.patch("tool_registry.engine.simulate", side_effect=flaky):
             out = investigate(ScriptedClient(steps), "stub", reg, "x", {"P001": 3000})
-        self.assertEqual([c["status"] for c in out["calls"] if c["tool"] == "run_scenario"], ["error", "success"])
-        self.assertTrue(out["calls"][0]["error"].startswith("cannot_calculate"))
+        self.assertEqual([c["status"] for c in out["calls"] if c["tool"] == "run_scenario"], ["error", "success", "success"])
+        self.assertTrue(next(c for c in out["calls"] if c["tool"] == "run_scenario")["error"].startswith("cannot_calculate"))
+
+    # ---- regressões do primeiro teste real no Bedrock (Nova Lite, us-east-2) -------------
+    def test_valor_de_baseline_e_evidencia_legitima(self):
+        """No Bedrock o agente citou '2500' (valor atual de P001) e foi recusado 6 vezes."""
+        reg = ToolRegistry(MODEL, SPECIALIST)
+        e = reg.call("run_scenario", {"overrides": {"P001": 3000}})["executionId"]
+        r = reg.call("register_finding", {"title": "Renda mínima de 2500 para 3000",
+                                          "text": "Com a renda mínima de 2500 para 3000, o motivo 102 vai de 1 para 5.",
+                                          "ruleRefs": ["R005"], "executionIds": [e]})
+        self.assertEqual(r["state"], "suggested")
+
+    def test_fato_estrutural_do_g2_pode_ser_citado(self):
+        """O achado 'inesperado' da demo cita a matriz de R008 (A=1000, B=500), que vem do G2."""
+        reg = ToolRegistry(MODEL, SPECIALIST)
+        e = reg.call("run_scenario", {"overrides": {"P001": 3000}})["executionId"]
+        with self.assertRaises(ToolError):                 # antes de consultar o G2: sem fonte
+            reg.call("register_finding", {"title": "BASICA sem uso", "text": "linha A=1000, B=500 sem uso",
+                                          "ruleRefs": ["R007", "R008"], "executionIds": [e]})
+        reg.call("get_candidates", {"overrides": {"P001": 3000}})
+        r = reg.call("register_finding", {"title": "BASICA sem uso", "text": "linha A=1000, B=500 sem uso",
+                                          "ruleRefs": ["R007", "R008"], "executionIds": [e]})
+        self.assertEqual(r["state"], "suggested")
+
+    def test_thinking_removido_e_recomendacao_cobrada(self):
+        """No Bedrock a resposta final veio só como <thinking>...</thinking>, sem RECOMENDAÇÃO."""
+        steps = [lambda m: ("", [("run_scenario", {"overrides": {"P001": 3000}}),
+                                 ("run_scenario", {"overrides": {"P001": 2800}})]),
+                 lambda m: "<thinking>Os achados foram registrados. Aguardarei a revisão humana.</thinking>",
+                 lambda m: "<thinking>ok</thinking>RECOMENDAÇÃO: revisar os 3 casos que mudam antes de decidir."]
+        out = investigate(ScriptedClient(steps), "stub", ToolRegistry(MODEL, SPECIALIST), "x", {"P001": 3000})
+        self.assertEqual(out["summary"], "RECOMENDAÇÃO: revisar os 3 casos que mudam antes de decidir.")
+        self.assertTrue(any("RECOMENDAÇÃO" in c["input"].get("text", "") and c["tool"] == "_plan"
+                            and "recusada" in c["input"]["text"] for c in out["calls"]))
+
+    def test_checklist_cobra_sensibilidade_quando_agente_pula(self):
+        """No Bedrock o agente simulou só o cenário confirmado; o checklist pede uma variação."""
+        steps = [lambda m: ("", [("run_scenario", {"overrides": {"P001": 3000}})]),
+                 lambda m: "RECOMENDAÇÃO: revisar.",
+                 lambda m: ("", [("run_scenario", {"overrides": {"P001": 2800}}),
+                                 ("compare", {"execution_id": _exec_ids(m)[0]})]),
+                 lambda m: "RECOMENDAÇÃO: revisar."]
+        reg = ToolRegistry(MODEL, SPECIALIST)
+        out = investigate(ScriptedClient(steps), "stub", reg, "x", {"P001": 3000})
+        self.assertEqual(len(reg.executions), 2)
+        self.assertEqual(out["status"], "done")
 
     def test_permissoes_de_quem_acionou(self):
         viewer = ToolRegistry(MODEL, Actor("vic", {"Viewer"}))
@@ -149,10 +197,11 @@ class AgentLoopTest(unittest.TestCase):
 
     def test_tool_desconhecida_e_parametro_invalido_viram_erro_recuperavel(self):
         steps = [lambda m: ("", [("apagar_politica", {}), ("run_scenario", {"overrides": {"P999": 1}})]),
+                 lambda m: "RECOMENDAÇÃO: nada a registrar.",
                  lambda m: "RECOMENDAÇÃO: nada a registrar."]
         reg = ToolRegistry(MODEL, SPECIALIST)
         out = investigate(ScriptedClient(steps), "stub", reg, "x", {"P001": 3000})
-        self.assertEqual([c["status"] for c in out["calls"]], ["error", "error"])
+        self.assertEqual([c["status"] for c in out["calls"] if c["tool"] != "_plan"], ["error", "error"])
         self.assertEqual(reg.executions, {})
 
     def test_orcamento_de_simulacoes(self):

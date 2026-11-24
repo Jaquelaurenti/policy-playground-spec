@@ -81,6 +81,7 @@ class ToolRegistry:
         self.findings: list[dict] = []
         self.prior_findings = list(prior_findings or [])
         self.calls: list[dict] = []          # no sprint: evento AgentToolCalled no event store
+        self.facts: list[dict] = []          # fatos estruturais devolvidos pelos geradores nesta investigação
 
     # ---- despacho + permissões + auditoria ------------------------------------------
     def call(self, name: str, args: dict) -> dict:
@@ -107,6 +108,11 @@ class ToolRegistry:
             raise ToolError(entry["error"]) from e
         finally:
             self.calls.append(entry)
+
+    def base_evidence(self) -> list:
+        """Números legítimos fora das execuções: valores de baseline dos parâmetros e fatos estruturais
+        que os geradores determinísticos devolveram nesta investigação (não são estimativas de impacto)."""
+        return [{"baseline": {pid: p.value for pid, p in self.model.parameters.items()}}, {"facts": self.facts}]
 
     def note(self, text: str) -> None:
         """Texto do agente entre chamadas (plano, raciocínio) entra na trilha (R17.7)."""
@@ -194,8 +200,10 @@ class ToolRegistry:
             cands += generators.g1_shared_input(self.model, ov)
         if "G2" in gens:
             cands += generators.g2_reachability(self.model, ov)
-        return {"candidates": [{"generator": c["generator"], "title": c["title"], "ruleRefs": c["ruleRefs"]}
-                               for c in cands]}
+        out = [{"generator": c["generator"], "title": c["title"], "text": c.get("text", ""), "ruleRefs": c["ruleRefs"]}
+               for c in cands]
+        self.facts.extend({"title": c["title"], "text": c["text"]} for c in out)
+        return {"candidates": out}
 
     def t_read_audit(self):
         return {"calls": [{k: c[k] for k in ("step", "tool", "status")} for c in self.calls],
@@ -213,10 +221,11 @@ class ToolRegistry:
         bad_refs = [r for r in ruleRefs if r not in self.model.rules and r not in self.model.parameters]
         if bad_refs:
             raise ToolError(f"ruleRefs inexistentes: {bad_refs}")
-        unbound = unbound_numbers(f"{title} {text}", [_evidence(x) for x in exs])
+        unbound = unbound_numbers(f"{title} {text}", [_evidence(x) for x in exs] + self.base_evidence())
         if unbound:
             raise ToolError(f"números sem evidência nas execuções {executionIds}: {unbound}. "
-                            "Cite só números presentes no resultado.")
+                            "Cite só números das execuções citadas, dos valores de baseline ou dos candidatos G1/G2; "
+                            "se não tiver a fonte, reescreva sem o número.")
         if any(f["title"] == title for f in self.findings):
             raise ToolError("achado repetido; registre algo novo ou conclua")
         f = {"findingId": "F-" + uuid.uuid4().hex[:8], "title": title[:160], "text": text[:800],
