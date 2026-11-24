@@ -44,7 +44,7 @@ Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que
 4. O especialista aciona o agente, que roda como job assíncrono.
 5. O agente escreve um plano, chama as tools, testa ao menos uma variação do cenário, compara as execuções e registra achados. Um número sem fonte numa execução é recusado e o agente corrige.
 6. O agente encerra com uma recomendação. Ele não decide.
-7. O especialista revisa os achados (analisar, descartar, marcar como útil).
+7. O especialista revisa os achados. Cada achado mostra a **evidência** (números da execução ligada a ele) e, quando tem **cenário próprio**, pode virar uma simulação com um clique: a variação que o agente testou (ex.: renda mínima 3.500, lado a lado com o cenário confirmado) ou o **recorte** de um achado estrutural (ex.: só as propostas com renda entre 2.500 e 3.000, mostrando quem perde a faixa BASICA). Sugestões sem parâmetro só vinculam a evidência do cenário confirmado.
 8. **Gate humano 2:** o aprovador de risco ou o especialista decide (aceitar, rejeitar ou adiar) com a evidência e a trilha de auditoria.
 9. Se a decisão for aceitar, o especialista gera o **pacote para engenharia**: mudança no Policy Spec, testes de regressão conferidos pelo motor, manifesto e prévia do PR. Nada é submetido; o PR real depende de acesso aos repositórios (OQ-9).
 
@@ -52,7 +52,7 @@ Fora deste perfil ficam Fargate, ALB, VPC endpoints, WAF, SQS e Object Lock, que
 
 | Persona | Grupo do Cognito | Pode | Não pode |
 | --- | --- | --- | --- |
-| Especialista de política | `policy-specialist` | Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados, decidir e gerar o pacote para engenharia | — |
+| Especialista de política | `policy-specialist` | Criar hipótese, confirmar cenário, simular, acionar o agente, revisar achados e simular o cenário de um achado, decidir e gerar o pacote para engenharia | — |
 | Aprovador de risco | `risk-approver` | Ler tudo e registrar a decisão (aceitar, rejeitar, adiar) | Criar hipóteses, simular, acionar o agente, gerar o pacote |
 | Analista de dados | `data-analyst` | Ler política, hipóteses, execuções, achados e trilha | Executar ou decidir (no MVP, mesmas permissões do leitor) |
 | Leitor | `viewer` | Somente ler | Mudar estado, inclusive por meio do agente ou do MCP |

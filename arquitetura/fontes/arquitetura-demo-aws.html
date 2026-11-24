@@ -227,7 +227,7 @@ code { font-family: var(--mono); font-size: .9em; }
     <p>Uma hipótese do começo à decisão. Os dois passos em laranja são os pontos em que só uma pessoa pode avançar. O passo 11 fecha o ciclo com o pacote para engenharia.</p>
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1316 560" role="img" aria-label="Fluxo funcional em raias: o especialista escreve a intenção, a aplicação estrutura a hipótese, o especialista confirma o cenário, o motor simula, o especialista aciona o agente, o agente planeja e chama ferramentas conversando com o Bedrock a cada passo, registra achados com evidência, envia a recomendação, o especialista revisa os achados e o aprovador decide; gera o pacote para engenharia se aceitou; analista e leitor consultam a trilha.">
+      <svg viewBox="0 0 1316 560" role="img" aria-label="Fluxo funcional em raias: o especialista escreve a intenção, a aplicação estrutura a hipótese, o especialista confirma o cenário, o motor simula, o especialista aciona o agente, o agente planeja e chama ferramentas conversando com o Bedrock a cada passo, registra achados com evidência, envia a recomendação, o especialista revisa os achados e simula o cenário de um achado, e o aprovador decide; gera o pacote para engenharia se aceitou; analista e leitor consultam a trilha.">
         <defs>
           <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
           <marker id="bb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0a746f"/></marker>
@@ -278,6 +278,12 @@ code { font-family: var(--mono); font-size: .9em; }
         <!-- 9 -->
         <rect class="box" x="982" y="59" width="90" height="52" rx="8"/>
         <text class="t-mono" x="992" y="77">9</text><text x="992" y="94">Revisa os</text><text x="992" y="106">achados</text>
+        <!-- 9b: achado vira cenário (R9) -->
+        <rect class="box" x="982" y="149" width="96" height="52" rx="8"/>
+        <text class="t-mono" x="992" y="167">9b</text><text x="992" y="184">Simula o</text><text x="992" y="196">achado</text>
+        <path class="edge" d="M1018,111 V147" marker-end="url(#b)"/>
+        <path class="edge-dash" d="M1042,149 V113" marker-end="url(#b)"/>
+        <text class="t-sub" x="992" y="214">recorte ou variação</text>
         <!-- 10 gate -->
         <rect class="gate-box" x="1086" y="404" width="100" height="52" rx="8"/>
         <text class="t-mono" x="1096" y="422">10</text><text x="1096" y="439">Decide com a</text><text x="1096" y="451">evidência</text>
@@ -305,7 +311,7 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-sub" x="264" y="214">sem IA</text>
         <text class="t-sub" x="472" y="214">selo SIMULADO</text>
         <text class="t-sub" x="680" y="226">job assíncrono</text>
-        <text class="t-sub" x="992" y="126">analisar · descartar · útil?</text>
+        <text class="t-sub" x="992" y="54">analisar · descartar · útil?</text>
         <text class="t-sub" x="1186" y="472" text-anchor="end">aceitar · rejeitar · adiar</text>
         <!-- 11 -->
         <rect class="box" x="1206" y="59" width="100" height="52" rx="8"/>
@@ -319,7 +325,7 @@ code { font-family: var(--mono); font-size: .9em; }
         <text class="t-sub" x="1216" y="222">patch · 12/12</text><text class="t-sub" x="1216" y="236">manifesto · PR</text>
       </svg>
       </div>
-      <figcaption>Nada é simulado antes do passo 3. Do 6 ao 8 o agente trabalha sozinho, até 14 passos, 6 simulações e 40 mil tokens. Ele escolhe o que testar, inclusive uma variação do cenário, e todo número que cita precisa existir numa execução do motor. Se não existir, a ferramenta recusa e o agente corrige. A decisão do passo 10 pode ser do aprovador de risco ou do próprio especialista. Se for aceite, o especialista gera no passo 11 o pacote para engenharia: a mudança no Policy Spec, os testes de regressão conferidos pelo motor, o manifesto e a prévia do PR. Nada é submetido; abrir o PR real depende de acesso aos repositórios (OQ-9).</figcaption>
+      <figcaption>Nada é simulado antes do passo 3. Do 6 ao 8 o agente trabalha sozinho, até 14 passos, 6 simulações e 40 mil tokens. Ele escolhe o que testar, inclusive uma variação do cenário, e todo número que cita precisa existir numa execução do motor. Se não existir, a ferramenta recusa e o agente corrige. A decisão do passo 10 pode ser do aprovador de risco ou do próprio especialista. No passo 9b, um achado com cenário próprio vira simulação com um clique: a variação que o agente testou ou o recorte de um achado estrutural (ex.: só as propostas com renda entre 2.500 e 3.000, mostrando quem perde a faixa BASICA). Se a decisão for aceite, o especialista gera no passo 11 o pacote para engenharia: a mudança no Policy Spec, os testes de regressão conferidos pelo motor, o manifesto e a prévia do PR. Nada é submetido; abrir o PR real depende de acesso aos repositórios (OQ-9).</figcaption>
     </figure>
   </section>
 
