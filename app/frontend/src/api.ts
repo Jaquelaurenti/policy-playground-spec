@@ -1,5 +1,5 @@
 // Cliente da API. Toda mudança de estado manda Idempotency-Key (tech.md).
-import { getConfig } from "./auth";
+import { getConfig, login } from "./auth";
 
 export type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -34,6 +34,13 @@ async function call(method: string, path: string, body?: unknown): Promise<Json>
   if (method !== "GET") h["Idempotency-Key"] = crypto.randomUUID();
   const r = await fetch(path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    // O API Gateway recusa o token do Cognito vencido (validade de 1 h): volta para o login.
+    const cfg = await getConfig();
+    sessionStorage.removeItem("pp.idToken");
+    if (cfg.auth === "cognito") setTimeout(() => { void login(cfg); }, 1500);
+    throw new ApiError(401, "Sua sessão expirou. Abrindo o login de novo…");
+  }
   if (!r.ok) throw new ApiError(r.status, data.detail || `Erro ${r.status}`);
   return data;
 }
