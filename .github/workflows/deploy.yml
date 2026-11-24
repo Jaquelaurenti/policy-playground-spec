@@ -19,6 +19,9 @@ jobs:
     environment: demo
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      # O buildx do runner anexa atestados (proveniência/SBOM) e publica um índice OCI;
+      # a Lambda recusa esse formato ("image manifest ... media type ... is not supported").
+      BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

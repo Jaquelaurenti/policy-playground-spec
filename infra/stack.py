@@ -19,6 +19,7 @@ from aws_cdk import (
     aws_cloudfront_origins as origins,
     aws_cognito as cognito,
     aws_dynamodb as ddb,
+    aws_ecr_assets as ecr_assets,
     aws_iam as iam,
     aws_lambda as lambda_,
     aws_logs as logs,
@@ -66,7 +67,8 @@ class PolicyPlaygroundDemo(cdk.Stack):
         # --- Backend: a mesma imagem do container, na Lambda
         fn = lambda_.DockerImageFunction(
             self, "Api", function_name=fn_name,
-            code=lambda_.DockerImageCode.from_image_asset(str(ROOT), file="app/Dockerfile"),
+            code=lambda_.DockerImageCode.from_image_asset(str(ROOT), file="app/Dockerfile",
+                                                          platform=ecr_assets.Platform.LINUX_AMD64),
             architecture=lambda_.Architecture.X86_64, memory_size=1024, timeout=cdk.Duration.seconds(120),   # job do agente (R17); o HTTP API segue cortando em 30 s
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={"PP_STORE": "dynamodb", "PP_TABLE": table.table_name, "PP_AUDIT_BUCKET": audit.bucket_name,
